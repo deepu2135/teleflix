@@ -3,7 +3,6 @@ package com.teleflix.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
@@ -61,12 +60,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         statusButton = Button(this).apply {
-            text = "TDLib Active"
-            textSize = 12f
+            text = "TDLib Channels & Auth"
+            textSize = 11f
             setBackgroundColor(android.graphics.Color.parseColor("#1E3A8A"))
             setTextColor(android.graphics.Color.parseColor("#93C5FD"))
             setOnClickListener {
-                showTdlibStatusDialog()
+                startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
         }
 
@@ -113,6 +112,21 @@ class MainActivity : AppCompatActivity() {
         loadFeaturedCatalog()
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateStatusButton()
+    }
+
+    private fun updateStatusButton() {
+        val active = TdlibManager.isSessionActive(this)
+        val channels = TdlibManager.getChannels(this).size
+        if (active) {
+            statusButton.text = "TDLib Connected ($channels Channels)"
+        } else {
+            statusButton.text = "Login to Telegram"
+        }
+    }
+
     private fun loadFeaturedCatalog() {
         mediaList.clear()
         mediaList.add(MediaItem("tt1375666", "Inception", "https://images.metahub.space/poster/medium/tt1375666/img", "2010", "8.8", "A thief who steals corporate secrets through dream-sharing technology."))
@@ -143,7 +157,7 @@ class MainActivity : AppCompatActivity() {
                         posterUrl = obj.optString("poster"),
                         year = obj.optString("year", "2024"),
                         rating = obj.optString("imdbRating", "8.0"),
-                        description = obj.optString("description", "")
+                        overview = obj.optString("description", "")
                     ))
                 }
 
@@ -167,22 +181,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showStreamOptions(item: MediaItem) {
-        val options = arrayOf("Play in Internal Player (ExoPlayer)", "Open in VLC Player", "Open in MPV Player")
+        val streams = TdlibManager.resolveStreams(item.title)
+        val streamTitles = streams.map { "${it.quality} (${it.size}) - ${it.channel}" }.toTypedArray()
+
         AlertDialog.Builder(this)
-            .setTitle(item.title)
+            .setTitle("${item.title} - Select TDLib Stream")
+            .setItems(streamTitles) { _, which ->
+                val selectedStream = streams[which]
+                showPlayerActionDialog(selectedStream.url, selectedStream.fileName)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showPlayerActionDialog(streamUrl: String, title: String) {
+        val options = arrayOf("Play in Internal ExoPlayer", "Open in VLC Player", "Open in MPV Player")
+        AlertDialog.Builder(this)
+            .setTitle("Select Player")
             .setItems(options) { _, which ->
-                val sampleUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
                 when (which) {
                     0 -> {
                         val intent = Intent(this, PlayerActivity::class.java).apply {
-                            putExtra("VIDEO_URL", sampleUrl)
-                            putExtra("VIDEO_TITLE", item.title)
+                            putExtra("VIDEO_URL", streamUrl)
+                            putExtra("VIDEO_TITLE", title)
                         }
                         startActivity(intent)
                     }
                     1 -> {
                         val vlcIntent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(Uri.parse(sampleUrl), "video/*")
+                            setDataAndType(Uri.parse(streamUrl), "video/*")
                             setPackage("org.videolan.vlc")
                         }
                         try { startActivity(vlcIntent) } catch (e: Exception) {
@@ -191,7 +218,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     2 -> {
                         val mpvIntent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(Uri.parse(sampleUrl), "video/*")
+                            setDataAndType(Uri.parse(streamUrl), "video/*")
                             setPackage("is.xyz.mpv")
                         }
                         try { startActivity(mpvIntent) } catch (e: Exception) {
@@ -202,65 +229,4 @@ class MainActivity : AppCompatActivity() {
             }
             .show()
     }
-
-    private fun showTdlibStatusDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("TDLib Engine Status")
-            .setMessage("Native TDLib Engine: Active\nMonitored Channels: @teleflix_movies_hd, @teleflix_series_zone\nByte-Range Streaming Proxy: Running")
-            .setPositiveButton("OK", null)
-            .show()
-    }
-}
-
-class MediaAdapter(
-    private val items: List<MediaItem>,
-    private val onClick: (MediaItem) -> Unit
-) : RecyclerView.Adapter<MediaAdapter.ViewHolder>() {
-
-    class ViewHolder(val view: android.widget.LinearLayout) : RecyclerView.ViewHolder(view) {
-        val titleText: android.widget.TextView = view.findViewById(101)
-        val yearText: android.widget.TextView = view.findViewById(102)
-    }
-
-    override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: int): ViewHolder {
-        val context = parent.context
-        val layout = android.widget.LinearLayout(context).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setBackgroundColor(android.graphics.Color.parseColor("#161B28"))
-            setPadding(16, 16, 16, 16)
-            layoutParams = android.view.ViewGroup.MarginLayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(8, 8, 8, 8)
-            }
-        }
-
-        val titleView = android.widget.TextView(context).apply {
-            id = 101
-            textSize = 14f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setTextColor(android.graphics.Color.WHITE)
-        }
-
-        val yearView = android.widget.TextView(context).apply {
-            id = 102
-            textSize = 12f
-            setTextColor(android.graphics.Color.parseColor("#9CA3AF"))
-        }
-
-        layout.addView(titleView)
-        layout.addView(yearView)
-
-        return ViewHolder(layout)
-    }
-
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val item = items[position]
-        holder.titleText.text = item.title
-        holder.yearText.text = "${item.year} • IMDb ${item.rating}"
-        holder.view.setOnClickListener { onClick(item) }
-    }
-
-    override fun getItemCount(): Int = items.size
 }
