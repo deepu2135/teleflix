@@ -29,7 +29,16 @@ data class MediaItem(
     val posterUrl: String,
     val year: String,
     val rating: String,
-    val overview: String
+    val overview: String,
+    val type: String = "movie"  // "movie" or "series"
+)
+
+data class EpisodeItem(
+    val season: Int,
+    val episode: Int,
+    val title: String,
+    val overview: String,
+    val released: String
 )
 
 class MainActivity : AppCompatActivity() {
@@ -151,7 +160,6 @@ class MainActivity : AppCompatActivity() {
                     selectedCategory = catalogId
                     categoryLabel.text = label
                     loadCinemeta(catalogId, label)
-                    // Rebuild tab colors
                     for (i in 0 until tabRow.childCount) {
                         val child = tabRow.getChildAt(i) as Button
                         val cat = categories[i].second
@@ -199,7 +207,6 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(rootView)
 
-        // Load catalogue from Cinemeta API
         loadCinemeta("movie/top", "Top Movies")
     }
 
@@ -222,6 +229,9 @@ class MainActivity : AppCompatActivity() {
         loadingText.text = "Loading $label from Cinemeta..."
         loadingText.visibility = android.view.View.VISIBLE
 
+        // Detect type from catalogId
+        val type = if (catalogId.startsWith("series")) "series" else "movie"
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val url = URL("https://v3-cinemeta.strem.io/catalog/$catalogId.json")
@@ -233,7 +243,7 @@ class MainActivity : AppCompatActivity() {
                 val json = JSONObject(text)
                 val metas = json.optJSONArray("metas") ?: JSONArray()
 
-                val results = parseMetas(metas, 20)
+                val results = parseMetas(metas, 20, type)
 
                 withContext(Dispatchers.Main) {
                     mediaList.clear()
@@ -258,7 +268,6 @@ class MainActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             val allResults = mutableListOf<MediaItem>()
 
-            // Search both movies and series
             for (type in listOf("movie", "series")) {
                 try {
                     val url = URL("https://v3-cinemeta.strem.io/catalog/$type/top/search=${java.net.URLEncoder.encode(query, "UTF-8")}.json")
@@ -269,7 +278,7 @@ class MainActivity : AppCompatActivity() {
                     val text = connection.inputStream.bufferedReader().readText()
                     val json = JSONObject(text)
                     val metas = json.optJSONArray("metas") ?: JSONArray()
-                    allResults.addAll(parseMetas(metas, 10))
+                    allResults.addAll(parseMetas(metas, 10, type))
                 } catch (_: Exception) { }
             }
 
@@ -286,7 +295,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun parseMetas(metas: JSONArray, limit: Int): List<MediaItem> {
+    private fun parseMetas(metas: JSONArray, limit: Int, type: String): List<MediaItem> {
         val results = mutableListOf<MediaItem>()
         for (i in 0 until minOf(metas.length(), limit)) {
             val obj = metas.getJSONObject(i)
@@ -296,7 +305,8 @@ class MainActivity : AppCompatActivity() {
                 posterUrl = obj.optString("poster"),
                 year = obj.optString("releaseInfo", obj.optString("year", "")),
                 rating = obj.optString("imdbRating", "—"),
-                overview = obj.optString("description", "")
+                overview = obj.optString("description", ""),
+                type = obj.optString("type", type)
             ))
         }
         return results
@@ -304,28 +314,119 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadFallbackCatalog() {
         mediaList.clear()
-        mediaList.add(MediaItem("tt1375666", "Inception", "https://images.metahub.space/poster/medium/tt1375666/img", "2010", "8.8", "A thief who steals corporate secrets through dream-sharing technology."))
-        mediaList.add(MediaItem("tt0944947", "Game of Thrones", "https://images.metahub.space/poster/medium/tt0944947/img", "2011", "9.2", "Nine noble families fight for control over Westeros."))
-        mediaList.add(MediaItem("tt4574334", "Stranger Things", "https://images.metahub.space/poster/medium/tt4574334/img", "2016", "8.7", "When a young boy vanishes, a small town uncovers a mystery."))
-        mediaList.add(MediaItem("tt0816692", "Interstellar", "https://images.metahub.space/poster/medium/tt0816692/img", "2014", "8.7", "A team of researchers travels through a wormhole in space."))
+        mediaList.add(MediaItem("tt1375666", "Inception", "", "2010", "8.8", "A thief who steals corporate secrets through dream-sharing technology.", "movie"))
+        mediaList.add(MediaItem("tt0944947", "Game of Thrones", "", "2011", "9.2", "Nine noble families fight for control over Westeros.", "series"))
+        mediaList.add(MediaItem("tt4574334", "Stranger Things", "", "2016", "8.7", "When a young boy vanishes, a small town uncovers a mystery.", "series"))
+        mediaList.add(MediaItem("tt0816692", "Interstellar", "", "2014", "8.7", "A team of researchers travels through a wormhole in space.", "movie"))
         updateGrid()
     }
 
     private fun updateGrid() {
         recyclerView.adapter = MediaAdapter(mediaList) { item ->
-            showStreamOptions(item)
+            if (item.type == "series") {
+                fetchSeriesEpisodes(item)
+            } else {
+                showStreamOptions(item.title)
+            }
         }
     }
 
-    private fun showStreamOptions(item: MediaItem) {
-        val streams = TdlibManager.resolveStreams(item.title)
+    // ── Series Episode Browser ──────────────────────────────────
+
+    private fun fetchSeriesEpisodes(item: MediaItem) {
+        Toast.makeText(this, "Loading episodes for ${item.title}...", Toast.LENGTH_SHORT).show()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = URL("https://v3-cinemeta.strem.io/meta/series/${item.id}.json")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 8000
+                connection.readTimeout = 8000
+                val text = connection.inputStream.bufferedReader().readText()
+                val json = JSONObject(text)
+                val meta = json.optJSONObject("meta") ?: JSONObject()
+                val videos = meta.optJSONArray("videos") ?: JSONArray()
+
+                val episodes = mutableListOf<EpisodeItem>()
+                for (i in 0 until videos.length()) {
+                    val v = videos.getJSONObject(i)
+                    val season = v.optInt("season", 0)
+                    val episode = v.optInt("episode", 0)
+                    if (season > 0 && episode > 0) {
+                        episodes.add(EpisodeItem(
+                            season = season,
+                            episode = episode,
+                            title = v.optString("name", "Episode $episode"),
+                            overview = v.optString("overview", ""),
+                            released = v.optString("released", "")
+                        ))
+                    }
+                }
+
+                // Group by season
+                val seasons = episodes.groupBy { it.season }.toSortedMap()
+
+                withContext(Dispatchers.Main) {
+                    if (seasons.isEmpty()) {
+                        Toast.makeText(this@MainActivity, "No episodes found", Toast.LENGTH_SHORT).show()
+                        return@withContext
+                    }
+                    showSeasonPicker(item.title, seasons)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Failed to load episodes: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showSeasonPicker(seriesTitle: String, seasons: Map<Int, List<EpisodeItem>>) {
+        val seasonLabels = seasons.keys.map { "Season $it (${seasons[it]?.size ?: 0} episodes)" }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("$seriesTitle — Pick Season")
+            .setItems(seasonLabels) { _, which ->
+                val seasonNum = seasons.keys.toList()[which]
+                val episodes = seasons[seasonNum] ?: return@setItems
+                showEpisodePicker(seriesTitle, seasonNum, episodes)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showEpisodePicker(seriesTitle: String, season: Int, episodes: List<EpisodeItem>) {
+        val episodeLabels = episodes.map { "E${String.format("%02d", it.episode)} — ${it.title}" }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("$seriesTitle — Season $season")
+            .setItems(episodeLabels) { _, which ->
+                val ep = episodes[which]
+                showStreamOptions(seriesTitle, season, ep.episode)
+            }
+            .setNegativeButton("Back") { _, _ ->
+                // Go back to season picker - re-fetch would be needed, but we can just use cached
+            }
+            .show()
+    }
+
+    // ── Stream Selection ────────────────────────────────────────
+
+    private fun showStreamOptions(title: String, season: Int? = null, episode: Int? = null) {
+        val streams = TdlibManager.resolveStreams(title, season, episode)
+        val displayTitle = if (season != null && episode != null) {
+            "$title S${String.format("%02d", season)}E${String.format("%02d", episode)}"
+        } else {
+            title
+        }
         val streamTitles = streams.map { "${it.quality} (${it.size}) - ${it.channel}" }.toTypedArray()
 
         AlertDialog.Builder(this)
-            .setTitle("${item.title} - Select Stream")
+            .setTitle("$displayTitle — Select Stream")
             .setItems(streamTitles) { _, which ->
                 val selectedStream = streams[which]
-                showPlayerActionDialog(selectedStream.url, selectedStream.fileName)
+                showPlayerActionDialog(selectedStream.url, displayTitle)
             }
             .setNegativeButton("Cancel", null)
             .show()
