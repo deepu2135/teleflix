@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Code
@@ -36,3 +38,31 @@ jobs:
         with:
           name: Teleflix-Streamer-Debug
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Get Short SHA
+        id: slug
+        run: echo "sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release with APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0-build.${{ github.run_number }}
+          name: "Teleflix Streamer v1.0.0 (Build #${{ github.run_number }})"
+          body: |
+            ## 📱 Teleflix Streamer - Auto Build
+
+            **Commit:** `${{ steps.slug.outputs.sha }}`
+            **Branch:** `master`
+
+            ### Features
+            - Live Cinemeta catalogue (Top Movies, Top Series, New, IMDB Top)
+            - Built-in ExoPlayer with speed & aspect ratio controls
+            - VLC & MPV external player launch
+            - TDLib Telegram channel manager & auth
+
+            ### Install
+            Download `Teleflix-Streamer-Debug.apk` below and install on your Android device.
+          files: app/build/outputs/apk/debug/app-debug.apk
+          draft: false
+          prerelease: false
