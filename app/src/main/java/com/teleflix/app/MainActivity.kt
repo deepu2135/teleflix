@@ -12,6 +12,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.CoroutineScope
@@ -67,7 +69,19 @@ class MainActivity : AppCompatActivity() {
         val rootView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(android.graphics.Color.parseColor("#090A0F"))
-            setPadding(16, 16, 16, 16)
+            setPadding(24, 24, 24, 24)
+            fitsSystemWindows = true
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(
+                24 + insets.left,
+                24 + insets.top,
+                24 + insets.right,
+                24 + insets.bottom
+            )
+            WindowInsetsCompat.CONSUMED
         }
 
         // Header Bar

@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -21,6 +23,18 @@ class SettingsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#090A0F"))
             setPadding(24, 24, 24, 24)
+            fitsSystemWindows = true
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(
+                24 + insets.left,
+                24 + insets.top,
+                24 + insets.right,
+                24 + insets.bottom
+            )
+            WindowInsetsCompat.CONSUMED
         }
 
         // Header
