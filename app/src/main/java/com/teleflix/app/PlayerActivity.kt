@@ -2,21 +2,45 @@ package com.teleflix.app
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 
 class PlayerActivity : AppCompatActivity() {
 
     private var player: ExoPlayer? = null
     private lateinit var playerView: PlayerView
+    private lateinit var speedButton: Button
+    private lateinit var resizeButton: Button
+    private lateinit var vlcButton: Button
+
     private var videoUrl: String = ""
     private var videoTitle: String = ""
+    private var currentSpeedIndex = 1
+    private val speeds = arrayOf(0.5f, 1.0f, 1.25f, 1.5f, 2.0f)
+    private val speedLabels = arrayOf("0.5x", "1.0x", "1.25x", "1.5x", "2.0x")
+
+    private var currentResizeModeIndex = 0
+    private val resizeModes = arrayOf(
+        AspectRatioFrameLayout.RESIZE_MODE_FIT,
+        AspectRatioFrameLayout.RESIZE_MODE_FILL,
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+        AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
+    )
+    private val resizeLabels = arrayOf("Fit", "Fill", "Zoom", "Stretch")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,6 +53,8 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         playerView = PlayerView(this).apply {
+            useController = true
+            controllerShowTimeoutMs = 3000
             layoutParams = android.widget.RelativeLayout.LayoutParams(
                 android.widget.RelativeLayout.LayoutParams.MATCH_PARENT,
                 android.widget.RelativeLayout.LayoutParams.MATCH_PARENT
@@ -36,11 +62,11 @@ class PlayerActivity : AppCompatActivity() {
         }
         rootView.addView(playerView)
 
-        // Title Overlay Bar
-        val topBar = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            setBackgroundColor(android.graphics.Color.parseColor("#88000000"))
-            setPadding(32, 32, 32, 32)
+        // Custom Overlay Bar with Full Controls
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(android.graphics.Color.parseColor("#99000000"))
+            setPadding(32, 24, 32, 24)
             layoutParams = android.widget.RelativeLayout.LayoutParams(
                 android.widget.RelativeLayout.LayoutParams.MATCH_PARENT,
                 android.widget.RelativeLayout.LayoutParams.WRAP_CONTENT
@@ -49,27 +75,45 @@ class PlayerActivity : AppCompatActivity() {
 
         val titleView = TextView(this).apply {
             text = videoTitle
-            textSize = 16f
+            textSize = 15f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(android.graphics.Color.WHITE)
-            layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        val vlcButton = Button(this).apply {
+        speedButton = Button(this).apply {
+            text = "Speed: 1.0x"
+            textSize = 11f
+            setBackgroundColor(android.graphics.Color.parseColor("#374151"))
+            setTextColor(android.graphics.Color.WHITE)
+            setOnClickListener { cyclePlaybackSpeed() }
+        }
+
+        resizeButton = Button(this).apply {
+            text = "Aspect: Fit"
+            textSize = 11f
+            setBackgroundColor(android.graphics.Color.parseColor("#374151"))
+            setTextColor(android.graphics.Color.WHITE)
+            setOnClickListener { cycleResizeMode() }
+        }
+
+        vlcButton = Button(this).apply {
             text = "VLC"
+            textSize = 11f
             setBackgroundColor(android.graphics.Color.parseColor("#EA580C"))
             setTextColor(android.graphics.Color.WHITE)
-            setOnClickListener {
-                openExternalPlayer("org.videolan.vlc")
-            }
+            setOnClickListener { openExternalPlayer("org.videolan.vlc") }
         }
 
         topBar.addView(titleView)
+        topBar.addView(speedButton)
+        topBar.addView(resizeButton)
         topBar.addView(vlcButton)
         rootView.addView(topBar)
 
         setContentView(rootView)
 
+        hideSystemUI()
         initializePlayer()
     }
 
@@ -84,17 +128,44 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun cyclePlaybackSpeed() {
+        currentSpeedIndex = (currentSpeedIndex + 1) % speeds.size
+        val newSpeed = speeds[currentSpeedIndex]
+        player?.playbackParameters = PlaybackParameters(newSpeed)
+        speedButton.text = "Speed: ${speedLabels[currentSpeedIndex]}"
+    }
+
+    private fun cycleResizeMode() {
+        currentResizeModeIndex = (currentResizeModeIndex + 1) % resizeModes.size
+        playerView.resizeMode = resizeModes[currentResizeModeIndex]
+        resizeButton.text = "Aspect: ${resizeLabels[currentResizeModeIndex]}"
+    }
+
     private fun openExternalPlayer(packageName: String) {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(Uri.parse(videoUrl), "video/*")
-            if (packageName.isNotEmpty()) {
-                setPackage(packageName)
-            }
+            if (packageName.isNotEmpty()) setPackage(packageName)
         }
         try {
             startActivity(intent)
         } catch (e: Exception) {
             Toast.makeText(this, "External player not installed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun hideSystemUI() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.apply {
+                hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            )
         }
     }
 
