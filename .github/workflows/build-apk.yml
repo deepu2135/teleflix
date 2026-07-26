@@ -22,11 +22,14 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Grant Execute Permission for Gradlew
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :app:assembleDebug --no-daemon
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
