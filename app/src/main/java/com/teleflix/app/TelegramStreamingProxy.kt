@@ -371,7 +371,8 @@ object TelegramStreamingProxy {
                 append("Content-Type: $mimeType\r\n")
                 append("Content-Disposition: inline; filename=\"$safeFileName\"\r\n")
                 append("Connection: keep-alive\r\n")
-                append("Keep-Alive: timeout=60, max=1000\r\n\r\n")
+                append("Cache-Control: no-cache\r\n")
+                append("X-Accel-Buffering: no\r\n\r\n")
             }.toString()
 
             output.write(headers.toByteArray())
@@ -544,7 +545,9 @@ object TelegramStreamingProxy {
             }
             append("Content-Type: $mimeType\r\n")
             append("Content-Disposition: inline; filename=\"$safeFileName\"\r\n")
-            append("Connection: close\r\n\r\n")
+            append("Connection: keep-alive\r\n")
+            append("Cache-Control: no-cache\r\n")
+            append("X-Accel-Buffering: no\r\n\r\n")
         }.toString()
 
         output.write(headers.toByteArray())
