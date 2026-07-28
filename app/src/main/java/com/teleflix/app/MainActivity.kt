@@ -1600,7 +1600,7 @@ class MainActivity : AppCompatActivity() {
 
         when (playerType) {
             "exo", "mpvex" -> {
-                val packagesToTry = listOf("com.brouken.player", "dev.anilbeesetti.nextplayer", "com.nextplayer.app", "com.google.android.exoplayer", "com.mxtech.videoplayer.ad", "com.mxtech.videoplayer.pro")
+                val packagesToTry = listOf("app.marlboroadvance.mpvex", "roadvance.mpvex", "com.brouken.player", "dev.anilbeesetti.nextplayer", "com.nextplayer.app", "com.google.android.exoplayer", "com.mxtech.videoplayer.ad", "com.mxtech.videoplayer.pro")
 
                 var launched = false
                 for (pkg in packagesToTry) {
@@ -1618,7 +1618,7 @@ class MainActivity : AppCompatActivity() {
                         val exoMatch = resolveInfo.firstOrNull { 
                             val pkgName = it.activityInfo.packageName.lowercase()
                             val label = it.loadLabel(packageManager).toString().lowercase()
-                            pkgName.contains("brouken") || pkgName.contains("nextplayer") || label.contains("just player") || label.contains("next player") || label.contains("exo")
+                            pkgName.contains("mpvex") || pkgName.contains("brouken") || pkgName.contains("nextplayer") || label.contains("mpvex") || label.contains("just player") || label.contains("next player") || label.contains("exo")
                         }
                         if (exoMatch != null) {
                             val intent = Intent(baseIntent).apply { setPackage(exoMatch.activityInfo.packageName) }
@@ -1630,8 +1630,8 @@ class MainActivity : AppCompatActivity() {
 
                 if (!launched) {
                     AlertDialog.Builder(this)
-                        .setTitle("⚡ ExoPlayer App Not Found")
-                        .setMessage("An ExoPlayer-based app (like Just Player or Next Player) was not detected on your phone.\n\nWould you like to select from your installed players or download Just Player (ExoPlayer) from GitHub?")
+                        .setTitle("⚡ ExoPlayer / MPVEX App Not Found")
+                        .setMessage("An ExoPlayer or MPVEX-based app was not detected on your phone.\n\nWould you like to select from your installed players or download Just Player from GitHub?")
                         .setPositiveButton("Choose Installed Player") { _, _ ->
                             val chooser = Intent.createChooser(baseIntent, "Select Video Player")
                             try { playerLauncher.launch(chooser) } catch (_: Exception) {
@@ -1651,7 +1651,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             "mpv" -> {
-                val packagesToTry = listOf("is.xyz.mpv", "is.xyz.mpv.debug", "id.nzxm.mpv")
+                val packagesToTry = listOf("app.marlboroadvance.mpvex", "roadvance.mpvex", "is.xyz.mpv", "is.xyz.mpv.debug", "id.nzxm.mpv")
                 var launched = false
                 for (pkg in packagesToTry) {
                     try {
