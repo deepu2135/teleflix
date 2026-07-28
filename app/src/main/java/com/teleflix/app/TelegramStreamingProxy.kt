@@ -16,8 +16,8 @@ import kotlin.concurrent.thread
 
 object TelegramStreamingProxy {
     private const val TAG = "TelegramProxy"
-    private const val CHUNK_SIZE = 1024 * 1024       // 1 MB served per player request (TDLib max limit)
-    var prefetchSizeMb = 50L                             // Prefetch window sent to TDLib (dynamically configured)
+    private const val CHUNK_SIZE = 256 * 1024        // 256 KB per ReadFilePart (TDLib native limit)
+    var prefetchSizeMb = 20L                             // Prefetch window sent to TDLib (dynamically configured)
     private const val DOWNLOAD_TIMEOUT_MS = 30_000L
     private const val DOWNLOAD_PRIORITY = 32              // max TDLib priority
     private const val POLL_INTERVAL_MS = 100L
@@ -382,6 +382,19 @@ object TelegramStreamingProxy {
                 m.exitReason = "head_request"
                 m.logEnd()
                 return
+            }
+
+            if (start == 0L && totalSize > 1_000_000L && (ext == "mkv" || ext == "mp4" || ext == "webm")) {
+                val tailOffset = maxOf(0L, totalSize - 524288L)
+                runCatching {
+                    TelegramClient.sendRequest(TdApi.DownloadFile().also { req ->
+                        req.fileId = fileId
+                        req.priority = DOWNLOAD_PRIORITY
+                        req.offset = tailOffset
+                        req.limit = 524288L
+                        req.synchronous = false
+                    })
+                }
             }
 
             var activeDownloadEnd = -1L
