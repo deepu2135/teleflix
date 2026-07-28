@@ -1554,17 +1554,28 @@ class MainActivity : AppCompatActivity() {
         activeTitleForResume = title
 
         // Immediately pre-warm TDLib download for offset 0 so first chunk is available in 0ms to external players
-        val fileId = streamUrl.substringAfter("/file/", "").substringBefore("/").substringBefore("?").toIntOrNull()
-        if (fileId != null) {
+        val fileIdsToPrewarm = mutableListOf<Int>()
+        if (streamUrl.contains("/file/")) {
+            streamUrl.substringAfter("/file/").substringBefore("/").substringBefore("?").toIntOrNull()?.let { fileIdsToPrewarm.add(it) }
+        } else if (streamUrl.contains("/merged/")) {
+            val segment = streamUrl.substringAfter("/merged/").substringBefore("/").substringBefore("?")
+            segment.split(",").mapNotNull { it.toIntOrNull() }.forEach { fileIdsToPrewarm.add(it) }
+        } else if (streamUrl.contains("/zip/")) {
+            streamUrl.substringAfter("/zip/").substringBefore("/").substringBefore("?").toIntOrNull()?.let { fileIdsToPrewarm.add(it) }
+        }
+
+        if (fileIdsToPrewarm.isNotEmpty()) {
             CoroutineScope(Dispatchers.IO).launch {
-                runCatching {
-                    TelegramClient.sendRequest(TdApi.DownloadFile().also { req ->
-                        req.fileId = fileId
-                        req.priority = 32
-                        req.offset = 0
-                        req.limit = 1048576
-                        req.synchronous = false
-                    })
+                fileIdsToPrewarm.forEach { fId ->
+                    runCatching {
+                        TelegramClient.sendRequest(TdApi.DownloadFile().also { req ->
+                            req.fileId = fId
+                            req.priority = 32
+                            req.offset = 0
+                            req.limit = 2097152L
+                            req.synchronous = false
+                        })
+                    }
                 }
             }
         }
@@ -1576,6 +1587,7 @@ class MainActivity : AppCompatActivity() {
             setDataAndType(Uri.parse(streamUrl), mimeType)
             putExtra("title", title)
             putExtra("filename", title)
+            putExtra("return_result", true)
             if (resumeMs > 0) {
                 putExtra("position", resumeMs.toInt())
                 putExtra("extra_position", resumeMs)

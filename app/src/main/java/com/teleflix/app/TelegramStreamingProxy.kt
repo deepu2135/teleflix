@@ -30,6 +30,7 @@ object TelegramStreamingProxy {
     @Volatile private var running = false
     private val activeStreamRequests = java.util.concurrent.ConcurrentHashMap<Int, MutableSet<String>>()
     private val activeFileJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+    private val pendingCancelJobs = java.util.concurrent.ConcurrentHashMap<Int, Job>()
     private val activeDownloadWindows = java.util.concurrent.ConcurrentHashMap<Int, Pair<Long, Long>>()
     private val lastDownloadRequestOffset = java.util.concurrent.ConcurrentHashMap<Int, Long>()
     private val lastDownloadRequestTime = java.util.concurrent.ConcurrentHashMap<Int, Long>()
@@ -361,6 +362,7 @@ object TelegramStreamingProxy {
                 totalSize = totalSize
             )
             metrics = m
+            pendingCancelJobs.remove(fileId)?.cancel()
             activeStreamRequests.getOrPut(fileId) { java.util.concurrent.ConcurrentHashMap.newKeySet<String>() }.add(m.reqId)
             m.logStart()
 
@@ -457,11 +459,17 @@ object TelegramStreamingProxy {
                 reqSet?.remove(reqId)
                 if (reqSet == null || reqSet.isEmpty()) {
                     activeStreamRequests.remove(fileId)
-                    activeDownloadWindows.remove(fileId)
-                    TeleflixLogger.log(TAG, "No active streams remaining for fileId=$fileId, cancelling TDLib background download immediately")
-                    runCatching {
-                        TelegramClient.sendRequest(TdApi.CancelDownloadFile(fileId, false))
+                    val cancelJob = scope.launch {
+                        delay(5000L)
+                        if (activeStreamRequests[fileId]?.isEmpty() != false) {
+                            activeDownloadWindows.remove(fileId)
+                            TeleflixLogger.log(TAG, "No active streams remaining for fileId=$fileId after grace period, cancelling TDLib background download")
+                            runCatching {
+                                TelegramClient.sendRequest(TdApi.CancelDownloadFile(fileId, false))
+                            }
+                        }
                     }
+                    pendingCancelJobs.put(fileId, cancelJob)?.cancel()
                 }
             }
         }
@@ -929,6 +937,8 @@ object TelegramStreamingProxy {
 
     fun cancelAllBackgroundDownloads() {
         scope.launch {
+            pendingCancelJobs.values.forEach { runCatching { it.cancel() } }
+            pendingCancelJobs.clear()
             activeDownloadWindows.keys.forEach { fileId ->
                 runCatching {
                     TelegramClient.sendRequest(TdApi.CancelDownloadFile(fileId, false))
