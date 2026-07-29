@@ -120,7 +120,7 @@ object TelegramStreamingProxy {
                 req.fileId = fileId
                 req.priority = if (isProbe) 16 else DOWNLOAD_PRIORITY
                 req.offset = offset
-                req.limit = if (limit > 0L) limit else 0L
+                req.limit = if (isProbe) limit else 0L
                 req.synchronous = false
             })
             if (res is TdApi.Error) {
