@@ -1569,8 +1569,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val isMkv = title.endsWith(".mkv", ignoreCase = true) || streamUrl.lowercase().contains(".mkv")
-        val mimeType = if (isMkv) "video/x-matroska" else "video/*"
+        val mimeType = "video/*"
 
         val baseIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(Uri.parse(streamUrl), mimeType)
