@@ -79,12 +79,18 @@ object TelegramStreamingProxy {
         }
     }
 
-    private suspend fun triggerTdlibDownload(fileId: Int, offset: Long, limit: Long, force: Boolean = false) {
+    private suspend fun triggerTdlibDownload(
+        fileId: Int,
+        offset: Long,
+        limit: Long,
+        force: Boolean = false,
+        isProbe: Boolean = false
+    ) {
         val now = System.currentTimeMillis()
         val lastOffset = lastDownloadRequestOffset[fileId]
         val lastTime = lastDownloadRequestTime[fileId] ?: 0L
 
-        val isOffsetJump = lastOffset != null && Math.abs(offset - lastOffset) > 1_000_000L
+        val isOffsetJump = !isProbe && lastOffset != null && Math.abs(offset - lastOffset) > 1_000_000L
 
         // Strict rate limit: never issue DownloadFile for the exact same offset more than once per 1,500ms
         // unless force=true or offset jumped
@@ -98,26 +104,29 @@ object TelegramStreamingProxy {
             return
         }
 
-        lastDownloadRequestOffset[fileId] = offset
-        lastDownloadRequestTime[fileId] = now
+        if (!isProbe) {
+            lastDownloadRequestOffset[fileId] = offset
+            lastDownloadRequestTime[fileId] = now
+        }
 
         try {
             // Cancel stuck TDLib download task before switching to new offset position
-            if (isOffsetJump || force) {
+            // Only cancel if this is a genuine main stream offset jump (NOT a probe read)
+            if (!isProbe && (isOffsetJump || force)) {
                 TelegramClient.sendRequest(TdApi.CancelDownloadFile(fileId, false))
             }
 
             val res = TelegramClient.sendRequest(TdApi.DownloadFile().also { req ->
                 req.fileId = fileId
-                req.priority = DOWNLOAD_PRIORITY
+                req.priority = if (isProbe) 16 else DOWNLOAD_PRIORITY
                 req.offset = offset
                 req.limit = if (limit > 0L) limit else 0L
                 req.synchronous = false
             })
             if (res is TdApi.Error) {
-                TeleflixLogger.log(TAG, "[TDLib Error] DownloadFile fileId=$fileId offset=$offset limit=$limit: code=${res.code} message=${res.message}", isError = true)
+                TeleflixLogger.log(TAG, "[TDLib Error] DownloadFile fileId=$fileId offset=$offset limit=$limit probe=$isProbe: code=${res.code} message=${res.message}", isError = true)
             } else {
-                TeleflixLogger.log(TAG, "[TDLib OK] DownloadFile fileId=$fileId offset=$offset limit=$limit force=$force jump=$isOffsetJump")
+                TeleflixLogger.log(TAG, "[TDLib OK] DownloadFile fileId=$fileId offset=$offset limit=$limit force=$force jump=$isOffsetJump probe=$isProbe")
             }
         } catch (e: Exception) {
             TeleflixLogger.log(TAG, "[TDLib Exception] DownloadFile fileId=$fileId: ${e.message}", isError = true)
@@ -427,7 +436,8 @@ object TelegramStreamingProxy {
                 val safeLimit = calculateSafeTdlibLimit(offset, totalSize, prefetchSizeMb, chunkSize)
 
                 if (activeDownloadEnd < 0L || offset >= activeDownloadEnd - maxOf(CHUNK_SIZE.toLong(), safeLimit / 4)) {
-                    triggerTdlibDownload(fileId, offset, safeLimit)
+                    val isProbe = m.requestType == "seek_probe"
+                    triggerTdlibDownload(fileId, offset, safeLimit, isProbe = isProbe)
                     activeDownloadEnd = if (safeLimit == 0L) totalSize else offset + safeLimit
                     activeDownloadWindows[fileId] = Pair(offset, activeDownloadEnd)
                 }
@@ -1107,7 +1117,8 @@ object TelegramStreamingProxy {
                         TeleflixLogger.log(TAG, "[TDLib] Retry fileId=$fileId offset=$offset attempt=$attempts backoffMs=15 totalWastedMs=${attempts * 15}")
                         runCatching { TelegramClient.sendRequest(TdApi.CancelDownloadFile(fileId, false)) }
                     }
-                    triggerTdlibDownload(fileId, offset, safeLimit, force = (attempts == 0 || !isDownloading))
+                    val isProbe = metrics?.requestType == "seek_probe"
+                    triggerTdlibDownload(fileId, offset, safeLimit, force = (attempts == 0 || !isDownloading), isProbe = isProbe)
                     val winEnd = if (safeLimit == 0L) Long.MAX_VALUE else offset + safeLimit
                     activeDownloadWindows[fileId] = Pair(offset, winEnd)
                 }
