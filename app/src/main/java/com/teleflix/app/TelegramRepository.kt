@@ -1193,6 +1193,11 @@ object TelegramRepository {
         val recentHistoryTask = async(Dispatchers.IO) {
             if (fromMessageId == 0L) {
                 try {
+                    if (forceRefresh) {
+                        try { TelegramClient.sendRequest(TdApi.OpenChat(chatId)) } catch (e: Exception) {}
+                        kotlinx.coroutines.delay(200) // Small delay for sync
+                    }
+
                     val chatHistoryRes = TelegramClient.sendRequest(TdApi.GetChatHistory().also { req ->
                         req.chatId = chatId
                         req.fromMessageId = 0L
@@ -1207,6 +1212,10 @@ object TelegramRepository {
                             if (msgTopicId != topicId) return@forEach
                         }
                         extractMediaMessage(msg, seen, results)
+                    }
+
+                    if (forceRefresh) {
+                        try { TelegramClient.sendRequest(TdApi.CloseChat(chatId)) } catch (e: Exception) {}
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "forceRefresh GetChatHistory error for $channelUsernameOrId: ${e.message}")
