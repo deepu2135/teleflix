@@ -1190,17 +1190,24 @@ object TelegramRepository {
             filters.add(TdApi.SearchMessagesFilterAudio())
         }
 
-        if (forceRefresh) {
-            try {
-                TelegramClient.sendRequest(TdApi.GetChatHistory().also { req ->
-                    req.chatId = chatId
-                    req.fromMessageId = 0L
-                    req.offset = 0
-                    req.limit = 1
-                    req.onlyLocal = false
-                })
-            } catch (e: Exception) {
-                Log.e(TAG, "forceRefresh GetChatHistory error for $channelUsernameOrId: ${e.message}")
+        val recentHistoryTask = async(Dispatchers.IO) {
+            if (fromMessageId == 0L) {
+                try {
+                    val chatHistoryRes = TelegramClient.sendRequest(TdApi.GetChatHistory().also { req ->
+                        req.chatId = chatId
+                        req.fromMessageId = 0L
+                        req.offset = 0
+                        req.limit = 100
+                        req.onlyLocal = false
+                    })
+                    val hist = chatHistoryRes as? TdApi.Messages
+                    hist?.messages?.forEach { msg ->
+                        if (topicId > 0 && msg.messageThreadId != topicId.toLong()) return@forEach
+                        extractMediaMessage(msg, seen, results)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "forceRefresh GetChatHistory error for $channelUsernameOrId: ${e.message}")
+                }
             }
         }
 
@@ -1238,6 +1245,8 @@ object TelegramRepository {
                 minNextMessageId = lastId
             }
         }
+
+        recentHistoryTask.await()
 
         val sorted = results.sortedByDescending { it.messageId }
         val res = Pair(sorted, minNextMessageId)
