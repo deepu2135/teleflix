@@ -1202,7 +1202,10 @@ object TelegramRepository {
                     })
                     val hist = chatHistoryRes as? TdApi.Messages
                     hist?.messages?.forEach { msg ->
-                        if (topicId > 0 && msg.messageThreadId != topicId.toLong()) return@forEach
+                        if (topicId > 0) {
+                            val msgTopicId = (msg.topicId as? TdApi.MessageTopicForum)?.forumTopicId ?: 0
+                            if (msgTopicId != topicId) return@forEach
+                        }
                         extractMediaMessage(msg, seen, results)
                     }
                 } catch (e: Exception) {
