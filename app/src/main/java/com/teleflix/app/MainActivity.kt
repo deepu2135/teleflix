@@ -79,6 +79,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fabSelectChats: ImageButton
     private lateinit var searchContainer: LinearLayout
     private lateinit var channelMenuButton: TextView
+    private lateinit var swipeRefreshLayout: androidx.swiperefreshlayout.widget.SwipeRefreshLayout
     private var isTelegramCatalogMode = false
     private var currentOpenChannelId: String? = null
     private var currentOpenTopicId: Int = 0
@@ -726,9 +727,9 @@ class MainActivity : AppCompatActivity() {
         recyclerView = RecyclerView(this).apply {
             layoutManager = gridLayoutManager
             adapter = mediaAdapter
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0, 1f
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
             )
         }
 
@@ -753,7 +754,53 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        rootView.addView(recyclerView)
+        swipeRefreshLayout = androidx.swiperefreshlayout.widget.SwipeRefreshLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0, 1f
+            )
+            addView(recyclerView)
+            setOnRefreshListener {
+                if (isInSearchMode) {
+                    val query = categoryLabel.text.toString().substringAfter("Search: \"").substringBefore("\"")
+                    if (query.isNotEmpty() && query != categoryLabel.text.toString()) {
+                        performSearch(query)
+                    } else {
+                        isRefreshing = false
+                    }
+                } else if (isTelegramCatalogMode) {
+                    if (currentOpenChannelId == null) {
+                        loadTelegramChannelsCatalog()
+                    } else {
+                        val label = categoryLabel.text.toString()
+                        val title = when {
+                            label.contains("Browsing: ") -> label.substringAfter("Browsing: ")
+                            label.contains("Topics in ") -> label.substringAfter("Topics in ")
+                            label.contains("Beginning of: ") -> label.substringAfter("Beginning of: ")
+                            else -> "Channel"
+                        }
+                        if (currentOpenTopicId != 0) {
+                            loadTelegramTopicMedia("$currentOpenChannelId/$currentOpenTopicId", title)
+                        } else {
+                            loadTelegramChannelMedia(currentOpenChannelId!!, title)
+                        }
+                    }
+                } else {
+                    if (selectedCategory.contains("library", true)) {
+                        loadLibraryCatalog(selectedLabel)
+                    } else {
+                        loadInitialCinemeta(selectedCategory, selectedLabel)
+                    }
+                }
+            }
+        }
+        rootView.addView(swipeRefreshLayout)
+
+        loadingText.viewTreeObserver.addOnGlobalLayoutListener {
+            if (loadingText.visibility == android.view.View.GONE) {
+                swipeRefreshLayout.isRefreshing = false
+            }
+        }
 
         val mainContainer = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
