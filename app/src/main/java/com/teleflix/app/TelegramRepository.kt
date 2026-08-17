@@ -1195,7 +1195,7 @@ object TelegramRepository {
                 try {
                     if (forceRefresh) {
                         try { TelegramClient.sendRequest(TdApi.OpenChat(chatId)) } catch (e: Exception) {}
-                        kotlinx.coroutines.delay(200) // Small delay for sync
+                        kotlinx.coroutines.delay(1500) // Wait 1.5s for TDLib to sync live updates
                     }
 
                     val chatHistoryRes = TelegramClient.sendRequest(TdApi.GetChatHistory().also { req ->
