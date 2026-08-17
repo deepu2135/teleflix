@@ -770,7 +770,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else if (isTelegramCatalogMode) {
                     if (currentOpenChannelId == null) {
-                        loadTelegramChannelsCatalog()
+                        loadTelegramChannelsCatalog(isRefresh = true)
                     } else {
                         val label = categoryLabel.text.toString()
                         val title = when {
@@ -780,9 +780,9 @@ class MainActivity : AppCompatActivity() {
                             else -> "Channel"
                         }
                         if (currentOpenTopicId != 0) {
-                            loadTelegramTopicMedia("$currentOpenChannelId/$currentOpenTopicId", title)
+                            loadTelegramTopicMedia("$currentOpenChannelId/$currentOpenTopicId", title, isRefresh = true)
                         } else {
-                            loadTelegramChannelMedia(currentOpenChannelId!!, title)
+                            loadTelegramChannelMedia(currentOpenChannelId!!, title, isRefresh = true)
                         }
                     }
                 } else {
@@ -1326,7 +1326,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadTelegramChannelsCatalog() {
+    private fun loadTelegramChannelsCatalog(isRefresh: Boolean = false) {
         isInSearchMode = false
         currentOpenChannelId = null
         hasMoreItems = false
@@ -1456,7 +1456,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadTelegramChannelMedia(channelUsername: String, title: String) {
+    private fun loadTelegramChannelMedia(channelUsername: String, title: String, isRefresh: Boolean = false) {
         if (currentOpenChannelId == null && isTelegramCatalogMode) {
             val gridManager = recyclerView.layoutManager as? GridLayoutManager
             savedChannelsCatalogScrollState = gridManager?.onSaveInstanceState()
@@ -1487,7 +1487,7 @@ class MainActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             val chatId = TelegramRepository.getChatId(channelUsername)
             val topics = if (chatId != null) {
-                try { TelegramRepository.getForumTopics(chatId) } catch (_: Exception) { emptyList() }
+                try { TelegramRepository.getForumTopics(chatId, forceRefresh = isRefresh) } catch (_: Exception) { emptyList() }
             } else emptyList()
 
             if (topics.isNotEmpty()) {
@@ -1525,7 +1525,7 @@ class MainActivity : AppCompatActivity() {
             loadingText.text = "Loading media files from $title..."
 
             val (mediaMessages, nextFromId) = try {
-                TelegramRepository.fetchChannelMedia(channelUsername, fromMessageId = 0L, limit = 100, includeAudio = true)
+                TelegramRepository.fetchChannelMedia(channelUsername, fromMessageId = 0L, limit = 100, includeAudio = true, forceRefresh = isRefresh)
             } catch (e: Exception) {
                 Pair(emptyList<TelegramVideoMessage>(), 0L)
             }
@@ -1552,7 +1552,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadTelegramTopicMedia(topicKey: String, topicTitle: String) {
+    private fun loadTelegramTopicMedia(topicKey: String, topicTitle: String, isRefresh: Boolean = false) {
         val parts = topicKey.split("_")
         val topicId = parts.getOrNull(2)?.toIntOrNull() ?: 0
         val channelUsername = parts.getOrNull(3) ?: currentOpenChannelId ?: ""
@@ -1581,7 +1581,7 @@ class MainActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             val (mediaMessages, nextFromId) = try {
-                TelegramRepository.fetchChannelMedia(channelUsername, fromMessageId = 0L, topicId = topicId, limit = 100, includeAudio = true)
+                TelegramRepository.fetchChannelMedia(channelUsername, fromMessageId = 0L, topicId = topicId, limit = 100, includeAudio = true, forceRefresh = isRefresh)
             } catch (e: Exception) {
                 Pair(emptyList<TelegramVideoMessage>(), 0L)
             }
