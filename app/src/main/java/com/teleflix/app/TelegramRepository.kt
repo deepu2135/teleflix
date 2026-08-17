@@ -1190,6 +1190,20 @@ object TelegramRepository {
             filters.add(TdApi.SearchMessagesFilterAudio())
         }
 
+        if (forceRefresh) {
+            try {
+                TelegramClient.sendRequest(TdApi.GetChatHistory().also { req ->
+                    req.chatId = chatId
+                    req.fromMessageId = 0L
+                    req.offset = 0
+                    req.limit = 1
+                    req.onlyLocal = false
+                })
+            } catch (e: Exception) {
+                Log.e(TAG, "forceRefresh GetChatHistory error for $channelUsernameOrId: ${e.message}")
+            }
+        }
+
         var minNextMessageId = 0L
 
         val tasks = filters.map { filter ->
