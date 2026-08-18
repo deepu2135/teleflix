@@ -663,8 +663,8 @@ object TelegramRepository {
         }
     }
 
-    suspend fun getForumTopics(chatId: Long, forceRefresh: Boolean = false): List<ForumTopicData> = coroutineScope {
-        if (!forceRefresh && cachedForumTopics.containsKey(chatId)) {
+    suspend fun getForumTopics(chatId: Long): List<ForumTopicData> = coroutineScope {
+        if (cachedForumTopics.containsKey(chatId)) {
             return@coroutineScope cachedForumTopics[chatId] ?: emptyList()
         }
 
@@ -1168,17 +1168,10 @@ object TelegramRepository {
         fromMessageId: Long = 0L,
         topicId: Int = 0,
         limit: Int = 100,
-        includeAudio: Boolean = true,
-        forceRefresh: Boolean = false
+        includeAudio: Boolean = true
     ): Pair<List<TelegramVideoMessage>, Long> = coroutineScope {
-        if (forceRefresh) {
-            val prefix = "$channelUsernameOrId-"
-            val keysToRemove = channelMediaCache.keys.filter { it.startsWith(prefix) }
-            keysToRemove.forEach { channelMediaCache.remove(it) }
-        }
-
         val cacheKey = "$channelUsernameOrId-$fromMessageId-$topicId-$limit-$includeAudio"
-        if (!forceRefresh && channelMediaCache.containsKey(cacheKey)) {
+        if (channelMediaCache.containsKey(cacheKey)) {
             return@coroutineScope channelMediaCache[cacheKey]!!
         }
 
@@ -1196,25 +1189,7 @@ object TelegramRepository {
             filters.add(TdApi.SearchMessagesFilterAudio())
         }
 
-        if (forceRefresh && fromMessageId == 0L) {
-            try {
-                try { TelegramClient.sendRequest(TdApi.OpenChat(chatId)) } catch (e: Exception) {}
-                
-                val initialChat = TelegramClient.sendRequest(TdApi.GetChat(chatId)) as? TdApi.Chat
-                val initialLastMsgId = initialChat?.lastMessage?.id ?: 0L
-                
-                for (i in 1..25) { // Wait up to 2.5s for TDLib to sync
-                    kotlinx.coroutines.delay(100)
-                    val currentChat = try { TelegramClient.sendRequest(TdApi.GetChat(chatId)) as? TdApi.Chat } catch (e: Exception) { null }
-                    val currentLastMsgId = currentChat?.lastMessage?.id ?: 0L
-                    if (currentLastMsgId != initialLastMsgId && currentLastMsgId != 0L) {
-                        break // TDLib has synced the new messages!
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "forceRefresh OpenChat sync error for $channelUsernameOrId: ${e.message}")
-            }
-        }
+
 
         val recentHistoryTask = async(Dispatchers.IO) {
             if (fromMessageId == 0L) {
@@ -1235,11 +1210,8 @@ object TelegramRepository {
                         extractMediaMessage(msg, seen, results)
                     }
 
-                    if (forceRefresh) {
-                        try { TelegramClient.sendRequest(TdApi.CloseChat(chatId)) } catch (e: Exception) {}
-                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "forceRefresh GetChatHistory error for $channelUsernameOrId: ${e.message}")
+                    Log.e(TAG, "GetChatHistory error for $channelUsernameOrId: ${e.message}")
                 }
             }
         }
