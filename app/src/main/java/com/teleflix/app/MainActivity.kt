@@ -4629,6 +4629,17 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, 4, 0, 14)
         }
         cardList.addView(subHeaderText)
+        
+        var reverseOrder = false
+        val reverseCheckBox = android.widget.CheckBox(this).apply {
+            text = "Reverse Part Order (Use if combined video fails to play)"
+            setTextColor(android.graphics.Color.WHITE)
+            setOnCheckedChangeListener { _, isChecked -> reverseOrder = isChecked }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, UITheme.dpToPx(this@MainActivity, 12))
+            }
+        }
+        cardList.addView(reverseCheckBox)
 
         var dialog: AlertDialog? = null
 
@@ -4645,7 +4656,8 @@ class MainActivity : AppCompatActivity() {
             isClickable = true
             setOnClickListener {
                 dialog?.dismiss()
-                DownloadManager.startMultiPartDownload(this@MainActivity, cleanTitle, item.originalFileName.ifBlank { cleanTitle }, finalParts, item.posterUrl)
+                val activeParts = if (reverseOrder) finalParts.reversed() else finalParts
+                DownloadManager.startMultiPartDownload(this@MainActivity, cleanTitle, item.originalFileName.ifBlank { cleanTitle }, activeParts, item.posterUrl)
                 Toast.makeText(this@MainActivity, "Started downloading & combining '$cleanTitle' 📥", Toast.LENGTH_SHORT).show()
             }
         }
