@@ -780,7 +780,7 @@ class MainActivity : AppCompatActivity() {
                             else -> "Channel"
                         }
                         if (currentOpenTopicId != 0) {
-                            loadTelegramTopicMedia("$currentOpenChannelId/$currentOpenTopicId", title, isRefresh = true)
+                            loadTelegramTopicMedia("topic_0_${currentOpenTopicId}_${currentOpenChannelId}", title, isRefresh = true)
                         } else {
                             loadTelegramChannelMedia(currentOpenChannelId!!, title, isRefresh = true)
                         }
