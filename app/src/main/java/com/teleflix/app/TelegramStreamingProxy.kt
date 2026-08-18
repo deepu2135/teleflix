@@ -505,9 +505,14 @@ object TelegramStreamingProxy {
                 streamFile(fileId, fileName, rangeHeader, output, urlSize, isHead)
             }
         } catch (e: java.util.concurrent.CancellationException) {
-            TeleflixLogger.log(TAG, "Client stream cancelled")
+            // normal stream cancellation
         } catch (e: IOException) {
-            TeleflixLogger.log(TAG, "Client disconnected: ${e.message}")
+            val msg = e.message ?: ""
+            if (!msg.contains("Broken pipe", ignoreCase = true) &&
+                !msg.contains("Connection reset", ignoreCase = true) &&
+                !msg.contains("Socket closed", ignoreCase = true)) {
+                TeleflixLogger.log(TAG, "Client disconnected: $msg")
+            }
         } catch (e: Exception) {
             TeleflixLogger.log(TAG, "Error handling client: ${e.message}", isError = true)
         } finally {

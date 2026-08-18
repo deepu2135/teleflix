@@ -4553,11 +4553,58 @@ class MainActivity : AppCompatActivity() {
         return extractFileIdsFromUrl(url).firstOrNull()
     }
 
+    private fun parseMergedPartsFromUrl(url: String, defaultTitle: String): List<TelegramVideoMessage>? {
+        if (!url.contains("/merged/") && !url.contains("/playlist/")) return null
+        val pattern = if (url.contains("/merged/")) "/merged/" else "/playlist/"
+        val segment = url.substringAfter(pattern).substringBefore("?")
+        val slashParts = segment.split("/", limit = 2)
+        val fileIds = slashParts[0].split(",").mapNotNull { it.toIntOrNull() }.filter { it != 0 }
+        if (fileIds.isEmpty()) return null
+        val rawName = if (slashParts.size > 1) {
+            runCatching { java.net.URLDecoder.decode(slashParts[1], "UTF-8") }.getOrDefault(defaultTitle)
+        } else defaultTitle
+        val queryStr = url.substringAfter("?", "")
+        val queryMap = queryStr.split("&").mapNotNull {
+            val p = it.split("=", limit = 2)
+            if (p.size == 2) p[0] to p[1] else null
+        }.toMap()
+        val sizes = queryMap["sizes"]?.split(",")?.mapNotNull { it.toLongOrNull() } ?: emptyList()
+        val chats = queryMap["chats"]?.split(",")?.mapNotNull { it.toLongOrNull() } ?: emptyList()
+        val messages = queryMap["messages"]?.split(",")?.mapNotNull { it.toLongOrNull() } ?: emptyList()
 
+        return fileIds.mapIndexed { index, fId ->
+            TelegramVideoMessage(
+                messageId = messages.getOrNull(index) ?: 0L,
+                chatId = chats.getOrNull(index) ?: 0L,
+                fileName = if (fileIds.size > 1) "${rawName}_part${index + 1}" else rawName,
+                fileSize = sizes.getOrNull(index) ?: 0L,
+                duration = 0,
+                fileId = fId,
+                mimeType = "video/mp4",
+                caption = ""
+            )
+        }
+    }
 
     private fun downloadStreamSource(stream: StreamSource, displayTitle: String, posterUrl: String) {
         val cleanFileName = stream.fileName.removePrefix("📺 ").removePrefix("🗄️ ").removePrefix("📦 ").trim()
         val cleanDisplayTitle = displayTitle.removePrefix("📺 ").removePrefix("🗄️ ").removePrefix("📦 ").trim()
+
+        val mergedParts = parseMergedPartsFromUrl(stream.url, cleanFileName.ifBlank { cleanDisplayTitle })
+        if (mergedParts != null && mergedParts.size > 1) {
+            val mediaItem = MediaItem(
+                id = stream.id,
+                title = cleanDisplayTitle,
+                posterUrl = posterUrl,
+                year = stream.size,
+                rating = stream.quality,
+                overview = "Multi-part video pack: $cleanDisplayTitle",
+                type = "telegram_media",
+                streamUrl = stream.url
+            )
+            showGroupDownloadOptionsDialog(mediaItem, mergedParts, cleanDisplayTitle)
+            return
+        }
 
         val cachedParts = telegramGroupPartsCache[stream.id]
         if ((stream.isSplit || stream.id.startsWith("group_")) && cachedParts != null && cachedParts.isNotEmpty()) {
@@ -4575,12 +4622,56 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val cleanId = stream.id.removePrefix("zip_").removePrefix("single_").removePrefix("stream_")
+        val messageId = cleanId.split("_").getOrNull(1)?.toLongOrNull() ?: 0L
+        val chatId = if (stream.chatId != 0L) stream.chatId else cleanId.split("_").getOrNull(0)?.toLongOrNull() ?: 0L
+
+        val isSplitFilename = Regex("(?i)\\.(zip\\.\\d+|z\\d+|part\\d+|7z\\.\\d+|r\\d+|\\d{3,4}|mkv\\.\\d+|mp4\\.\\d+)$").containsMatchIn(cleanFileName)
+        if ((stream.isSplit || stream.id.startsWith("group_") || isSplitFilename) && chatId != 0L && messageId != 0L) {
+            Toast.makeText(this, "Resolving split video parts for download...", Toast.LENGTH_SHORT).show()
+            CoroutineScope(Dispatchers.Main).launch {
+                val mediaMessages = withContext(Dispatchers.IO) {
+                    TelegramRepository.fetchChannelMediaAroundMessage(chatId.toString(), targetMsgId = messageId, limit = 100).first
+                }
+                val groupedItems = TelegramRepository.groupAndPreserveOrder(mediaMessages)
+                val matchGroup = groupedItems.filterIsInstance<DisplayItem.Group>()
+                    .find { g -> g.group.parts.any { it.messageId == messageId } }
+                if (matchGroup != null && matchGroup.group.parts.size > 1) {
+                    telegramGroupPartsCache[stream.id] = matchGroup.group.parts
+                    val mediaItem = MediaItem(
+                        id = stream.id,
+                        title = cleanDisplayTitle,
+                        posterUrl = posterUrl,
+                        year = stream.size,
+                        rating = stream.quality,
+                        overview = "Multi-part video pack: $cleanDisplayTitle",
+                        type = "telegram_media",
+                        streamUrl = stream.url
+                    )
+                    showGroupDownloadOptionsDialog(mediaItem, matchGroup.group.parts, cleanDisplayTitle)
+                    return@launch
+                }
+                val fileId = extractFileIdFromUrl(stream.url)
+                if (fileId != null && fileId != 0) {
+                    val fileName = DownloadManager.sanitizeFileName(cleanFileName.ifBlank { cleanDisplayTitle })
+                    DownloadManager.startDownload(
+                        context = this@MainActivity,
+                        title = cleanDisplayTitle,
+                        fileName = fileName,
+                        fileId = fileId,
+                        chatId = chatId,
+                        messageId = messageId,
+                        posterUrl = posterUrl
+                    )
+                    Toast.makeText(this@MainActivity, "Started downloading '$cleanDisplayTitle' 📥", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return
+        }
+
         val fileId = extractFileIdFromUrl(stream.url)
         if (fileId != null && fileId != 0) {
             val fileName = DownloadManager.sanitizeFileName(cleanFileName.ifBlank { cleanDisplayTitle })
-            val cleanId = stream.id.removePrefix("zip_").removePrefix("single_").removePrefix("stream_")
-            val messageId = cleanId.split("_").getOrNull(1)?.toLongOrNull() ?: 0L
-            val chatId = if (stream.chatId != 0L) stream.chatId else cleanId.split("_").getOrNull(0)?.toLongOrNull() ?: 0L
             DownloadManager.startDownload(
                 context = this,
                 title = cleanDisplayTitle,
@@ -4793,6 +4884,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val cleanTitle = item.title.removePrefix("Select:").removePrefix("Select").removePrefix("📺 ").removePrefix("🗄️ ").removePrefix("📦 ").trim()
+        val streamInfo = telegramStreamCache[item.id]
+        val rawUrl = streamInfo?.first ?: item.streamUrl
+
+        val mergedParts = parseMergedPartsFromUrl(rawUrl, cleanTitle)
+        if (mergedParts != null && mergedParts.size > 1) {
+            showGroupDownloadOptionsDialog(item, mergedParts, cleanTitle)
+            return
+        }
+
         val cachedParts = telegramGroupPartsCache[item.id]
         val parts = if (item.groupedFiles.isNotEmpty()) {
             item.groupedFiles.map { 
@@ -4817,7 +4918,6 @@ class MainActivity : AppCompatActivity() {
             cachedParts ?: emptyList()
         }
 
-        val cleanTitle = item.title.removePrefix("Select:").removePrefix("Select").removePrefix("📺 ").removePrefix("🗄️ ").removePrefix("📦 ").trim()
         if (item.id.startsWith("group_") || item.type == "history_group" || parts.size > 1) {
             if (parts.isNotEmpty()) {
                 showGroupDownloadOptionsDialog(item, parts, cleanTitle)
@@ -4825,17 +4925,48 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val streamInfo = telegramStreamCache[item.id]
-        val rawUrl = streamInfo?.first ?: item.streamUrl
+        val rest = item.id.removePrefix("single_").removePrefix("stream_").removePrefix("zip_")
+        val partsSplit = rest.split("_")
+        val chatId = partsSplit.getOrNull(0)?.toLongOrNull() ?: 0L
+        val messageId = partsSplit.getOrNull(1)?.toLongOrNull() ?: 0L
+        val isSplitFilename = Regex("(?i)\\.(zip\\.\\d+|z\\d+|part\\d+|7z\\.\\d+|r\\d+|\\d{3,4}|mkv\\.\\d+|mp4\\.\\d+)$").containsMatchIn(item.originalFileName.ifBlank { cleanTitle })
+
+        if (isSplitFilename && chatId != 0L && messageId != 0L) {
+            Toast.makeText(this, "Resolving split video parts for download...", Toast.LENGTH_SHORT).show()
+            CoroutineScope(Dispatchers.Main).launch {
+                val mediaMessages = withContext(Dispatchers.IO) {
+                    TelegramRepository.fetchChannelMediaAroundMessage(chatId.toString(), targetMsgId = messageId, limit = 100).first
+                }
+                val groupedItems = TelegramRepository.groupAndPreserveOrder(mediaMessages)
+                val matchGroup = groupedItems.filterIsInstance<DisplayItem.Group>()
+                    .find { g -> g.group.parts.any { it.messageId == messageId } }
+                if (matchGroup != null && matchGroup.group.parts.size > 1) {
+                    telegramGroupPartsCache[item.id] = matchGroup.group.parts
+                    showGroupDownloadOptionsDialog(item, matchGroup.group.parts, cleanTitle)
+                    return@launch
+                }
+                val fileId = extractFileIdFromUrl(rawUrl)
+                if (fileId != null && fileId != 0) {
+                    val fileName = DownloadManager.sanitizeFileName(item.originalFileName.ifBlank { cleanTitle })
+                    DownloadManager.startDownload(
+                        context = this@MainActivity,
+                        title = cleanTitle,
+                        fileName = fileName,
+                        fileId = fileId,
+                        chatId = chatId,
+                        messageId = messageId,
+                        posterUrl = item.posterUrl
+                    )
+                    Toast.makeText(this@MainActivity, "Started downloading '$cleanTitle' 📥", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return
+        }
+
         val fileId = extractFileIdFromUrl(rawUrl)
 
         if (fileId != null && fileId != 0) {
             val fileName = DownloadManager.sanitizeFileName(item.originalFileName.ifBlank { cleanTitle })
-            val rest = item.id.removePrefix("single_").removePrefix("stream_").removePrefix("zip_")
-            val parts = rest.split("_")
-            val chatId = parts.getOrNull(0)?.toLongOrNull() ?: 0L
-            val messageId = parts.getOrNull(1)?.toLongOrNull() ?: 0L
-
             DownloadManager.startDownload(
                 context = this,
                 title = cleanTitle,
@@ -4851,10 +4982,6 @@ class MainActivity : AppCompatActivity() {
 
         if (item.type == "telegram_media" || item.streamUrl.contains("/stream") || item.streamUrl.contains("http") || item.id.contains("_")) {
             val fileName = DownloadManager.sanitizeFileName(item.originalFileName.ifBlank { cleanTitle })
-            val rest = item.id.removePrefix("single_").removePrefix("stream_").removePrefix("zip_")
-            val parts = rest.split("_")
-            val chatId = parts.getOrNull(0)?.toLongOrNull() ?: 0L
-            val messageId = parts.getOrNull(1)?.toLongOrNull() ?: 0L
 
             Toast.makeText(this, "Resolving video link for download...", Toast.LENGTH_SHORT).show()
             if (chatId != 0L && messageId != 0L) {
@@ -4863,6 +4990,11 @@ class MainActivity : AppCompatActivity() {
                         TelegramRepository.getFreshMediaUrl(chatId, messageId)
                     }
                     if (freshUrl != null) {
+                        val freshMerged = parseMergedPartsFromUrl(freshUrl, cleanTitle)
+                        if (freshMerged != null && freshMerged.size > 1) {
+                            showGroupDownloadOptionsDialog(item, freshMerged, cleanTitle)
+                            return@launch
+                        }
                         val freshId = extractFileIdFromUrl(freshUrl)
                         if (freshId != null && freshId != 0) {
                             DownloadManager.startDownload(
