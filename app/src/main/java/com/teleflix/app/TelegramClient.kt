@@ -140,11 +140,26 @@ object TelegramClient {
     fun updateCacheLimit() {
         client?.send(TdApi.SetOption("storage_max_size", TdApi.OptionValueInteger(2000000000000L)), null)
         client?.send(TdApi.SetOption("storage_max_files", TdApi.OptionValueInteger(2000000L)), null)
-        client?.send(TdApi.SetOption("download_files_in_background", TdApi.OptionValueBoolean(true)), null)
+        client?.send(TdApi.SetOption("download_files_in_background", TdApi.OptionValueBoolean(false)), null)
         client?.send(TdApi.SetOption("online", TdApi.OptionValueBoolean(true)), null)
         client?.send(TdApi.SetOption("max_download_file_size", TdApi.OptionValueInteger(50000000000L)), null)
         client?.send(TdApi.SetOption("prefer_ipv6", TdApi.OptionValueBoolean(false)), null)
         client?.send(TdApi.SetNetworkType(TdApi.NetworkTypeOther()), null)
+
+        val disabledAutoDownload = TdApi.AutoDownloadSettings(
+            /* isAutoDownloadEnabled = */ false,
+            /* maxPhotoFileSize = */ 0,
+            /* maxVideoFileSize = */ 0L,
+            /* maxOtherFileSize = */ 0L,
+            /* videoUploadBitrate = */ 0,
+            /* preloadLargeVideos = */ false,
+            /* preloadNextAudio = */ false,
+            /* preloadStories = */ false,
+            /* useLessDataForCalls = */ true
+        )
+        client?.send(TdApi.SetAutoDownloadSettings(disabledAutoDownload, TdApi.NetworkTypeOther()), null)
+        client?.send(TdApi.SetAutoDownloadSettings(disabledAutoDownload, TdApi.NetworkTypeWiFi()), null)
+        client?.send(TdApi.SetAutoDownloadSettings(disabledAutoDownload, TdApi.NetworkTypeMobile()), null)
     }
 
     fun deleteFile(fileId: Int) {

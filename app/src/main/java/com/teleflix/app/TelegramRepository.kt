@@ -288,16 +288,7 @@ object TelegramRepository {
 
         val photoFileId = chat.photo?.small?.id
         if (photoFileId != null && photoFileId > 0) {
-            val photoSize = chat.photo?.small?.expectedSize?.toLong() ?: (100 * 1024L)
-            runCatching {
-                TelegramClient.sendRequest(TdApi.DownloadFile().also { req ->
-                    req.fileId = photoFileId
-                    req.priority = 1
-                    req.offset = 0
-                    req.limit = if (photoSize in 1..2_097_152L) photoSize else 100 * 1024L
-                    req.synchronous = false
-                })
-            }
+            TelegramStreamingProxy.registerThumbnail(chat.id, 0L, photoFileId)
         }
 
         return TelegramChatInfo(
@@ -458,15 +449,7 @@ object TelegramRepository {
             val photoFileId = chat?.photo?.small?.id
             if (photoFileId != null && photoFileId > 0) {
                 prefs.edit().putInt(chatId.toString(), photoFileId).apply()
-                runCatching {
-                    TelegramClient.sendRequest(TdApi.DownloadFile().also { req ->
-                        req.fileId = photoFileId
-                        req.priority = 1
-                        req.offset = 0
-                        req.limit = 0
-                        req.synchronous = false
-                    })
-                }
+                TelegramStreamingProxy.registerThumbnail(chatId, 0L, photoFileId)
                 photoFileId
             } else if (cachedPhotoId > 0) {
                 cachedPhotoId
@@ -1505,10 +1488,14 @@ object TelegramRepository {
         TelegramStreamingProxy.getUrl(fileId, fileName, expectedSize, chatId, messageId)
 
     fun getThumbnailUrl(chatId: Long, messageId: Long, thumbnailFileId: Int? = null): String {
+        if (thumbnailFileId != null && thumbnailFileId > 0) {
+            if (chatId != 0L && messageId != 0L) {
+                TelegramStreamingProxy.registerThumbnail(chatId, messageId, thumbnailFileId)
+            }
+            return TelegramStreamingProxy.getThumbnailUrl(thumbnailFileId)
+        }
         return if (chatId != 0L && messageId != 0L) {
             TelegramStreamingProxy.getThumbnailUrl(chatId, messageId)
-        } else if (thumbnailFileId != null && thumbnailFileId > 0) {
-            TelegramStreamingProxy.getThumbnailUrl(thumbnailFileId)
         } else {
             ""
         }

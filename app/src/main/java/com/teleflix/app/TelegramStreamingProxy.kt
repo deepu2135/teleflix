@@ -42,12 +42,20 @@ object TelegramStreamingProxy {
             return value.size
         }
     }
+    private val thumbnailMutexes = java.util.concurrent.ConcurrentHashMap<Int, Mutex>()
+    private fun getThumbnailMutex(fileId: Int): Mutex = thumbnailMutexes.getOrPut(fileId) { Mutex() }
     private val messageThumbMap = java.util.concurrent.ConcurrentHashMap<Pair<Long, Long>, Int>()
     private val fileMutexes = java.util.concurrent.ConcurrentHashMap<Int, Mutex>()
     private fun getFileMutex(fileId: Int): Mutex = fileMutexes.getOrPut(fileId) { Mutex() }
     private val fileToMessageMap = java.util.concurrent.ConcurrentHashMap<Int, Pair<Long, Long>>()
     private val fileIdTranslationMap = java.util.concurrent.ConcurrentHashMap<Int, Int>()
     @Volatile private var lastStreamedFileId: Int? = null
+
+    fun registerThumbnail(chatId: Long, messageId: Long, thumbFileId: Int) {
+        if (thumbFileId > 0) {
+            messageThumbMap[Pair(chatId, messageId)] = thumbFileId
+        }
+    }
 
     fun registerFileMessage(fileId: Int, chatId: Long, messageId: Long) {
         if (fileId != 0 && chatId != 0L && messageId != 0L) {
@@ -1388,7 +1396,6 @@ object TelegramStreamingProxy {
             return
         }
 
-        // 1. Check RAM LRU Cache (Instant 0.1ms response)
         val cachedBytes = thumbnailMemoryCache.get(fileId)
         if (cachedBytes != null) {
             val headers = "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: ${cachedBytes.size}\r\nConnection: keep-alive\r\n\r\n"
@@ -1401,84 +1408,78 @@ object TelegramStreamingProxy {
             return
         }
 
-        // 2. Check local disk path from TDLib (Instant 1ms response)
-        val fileInfo = getFileInfo(fileId)
-        val localPath = fileInfo?.first
-        val expectedSize = fileInfo?.second ?: 0L
-
-        // Safety check: Thumbnail files should never be > 5 MB (videos/documents are large files)
-        if (expectedSize > 5 * 1024 * 1024L) {
+        val bytes = getThumbnailBytes(fileId)
+        if (bytes != null && bytes.isNotEmpty()) {
+            val headers = "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: ${bytes.size}\r\nConnection: keep-alive\r\n\r\n"
+            output.write(headers.toByteArray())
+            output.flush()
+            if (!isHead) {
+                output.write(bytes)
+                output.flush()
+            }
+        } else {
             output.write("HTTP/1.1 404 Not Found\r\n\r\n".toByteArray())
             output.flush()
-            return
         }
+    }
 
-        if (localPath != null && localPath.isNotBlank()) {
-            val file = java.io.File(localPath)
-            if (file.exists() && file.length() in 1..(5 * 1024 * 1024L)) {
-                val length = file.length()
-                if (length <= 2 * 1024 * 1024L) {
-                    runCatching { thumbnailMemoryCache.put(fileId, file.readBytes()) }
-                }
-                val headers = "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: $length\r\nConnection: keep-alive\r\n\r\n"
-                output.write(headers.toByteArray())
-                output.flush()
-                if (!isHead) {
-                    file.inputStream().use { input -> input.copyTo(output, bufferSize = 64 * 1024) }
-                    output.flush()
-                }
-                return
+    private suspend fun getThumbnailBytes(fileId: Int): ByteArray? {
+        val mem = thumbnailMemoryCache.get(fileId)
+        if (mem != null) return mem
+
+        val thumbMutex = getThumbnailMutex(fileId)
+        return thumbMutex.withLock {
+            val mem2 = thumbnailMemoryCache.get(fileId)
+            if (mem2 != null) return@withLock mem2
+
+            val fileObj = try {
+                TelegramClient.sendRequest(TdApi.GetFile(fileId)) as? TdApi.File
+            } catch (_: Exception) { null }
+
+            val expectedSize = fileObj?.expectedSize ?: fileObj?.size ?: 0L
+            if (expectedSize > 5 * 1024 * 1024L) {
+                return@withLock null
             }
-        }
 
-        // 3. Trigger capped-limit thumbnail download (512 KB max) instead of 0 (unlimited EOF)
-        val thumbLimit = if (expectedSize in 1..5_242_880L) expectedSize else 512 * 1024L
-        runCatching {
-            TelegramClient.sendRequest(TdApi.DownloadFile().also { req ->
-                req.fileId = fileId
-                req.priority = 8
-                req.offset = 0
-                req.limit = thumbLimit
-                req.synchronous = false
-            })
-        }
-
-        var downloadedFile: java.io.File? = null
-        var attempts = 0
-        while (attempts < 40 && running) {
-            val f = try { TelegramClient.sendRequest(TdApi.GetFile(fileId)) as? TdApi.File } catch (_: Exception) { null }
-            if (f?.local?.isDownloadingCompleted == true && !f.local.path.isNullOrBlank()) {
-                val diskFile = java.io.File(f.local.path)
+            if (fileObj?.local?.isDownloadingCompleted == true && !fileObj.local.path.isNullOrBlank()) {
+                val diskFile = java.io.File(fileObj.local.path)
                 if (diskFile.exists() && diskFile.length() in 1..(5 * 1024 * 1024L)) {
-                    downloadedFile = diskFile
-                    break
+                    val bytes = diskFile.readBytes()
+                    if (bytes.size <= 2 * 1024 * 1024) {
+                        thumbnailMemoryCache.put(fileId, bytes)
+                    }
+                    return@withLock bytes
                 }
             }
-            delay(50L)
-            attempts++
-        }
 
-        try {
-            if (downloadedFile != null) {
-                val length = downloadedFile.length()
-                if (length <= 2 * 1024 * 1024L) {
-                    runCatching { thumbnailMemoryCache.put(fileId, downloadedFile.readBytes()) }
-                }
-                val headers = "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: $length\r\nConnection: keep-alive\r\n\r\n"
-                output.write(headers.toByteArray())
-                output.flush()
-                if (!isHead) {
-                    downloadedFile.inputStream().use { input -> input.copyTo(output, bufferSize = 64 * 1024) }
-                    output.flush()
-                }
-            } else {
-                output.write("HTTP/1.1 404 Not Found\r\n\r\n".toByteArray())
-                output.flush()
+            val thumbLimit = if (expectedSize in 1..5_242_880L) expectedSize else 512 * 1024L
+            runCatching {
+                TelegramClient.sendRequest(TdApi.DownloadFile().also { req ->
+                    req.fileId = fileId
+                    req.priority = 16
+                    req.offset = 0
+                    req.limit = thumbLimit
+                    req.synchronous = false
+                })
             }
-        } finally {
-            if (!DownloadManager.isFileIdActive(fileId)) {
-                runCatching { TelegramClient.sendRequest(TdApi.CancelDownloadFile(fileId, false)) }
+
+            var attempts = 0
+            while (attempts < 60 && running) {
+                val f = try { TelegramClient.sendRequest(TdApi.GetFile(fileId)) as? TdApi.File } catch (_: Exception) { null }
+                if (f?.local?.isDownloadingCompleted == true && !f.local.path.isNullOrBlank()) {
+                    val diskFile = java.io.File(f.local.path)
+                    if (diskFile.exists() && diskFile.length() in 1..(5 * 1024 * 1024L)) {
+                        val bytes = diskFile.readBytes()
+                        if (bytes.size <= 2 * 1024 * 1024) {
+                            thumbnailMemoryCache.put(fileId, bytes)
+                        }
+                        return@withLock bytes
+                    }
+                }
+                delay(50L)
+                attempts++
             }
+            null
         }
     }
 
