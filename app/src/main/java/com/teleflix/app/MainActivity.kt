@@ -648,7 +648,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                         } else {
-                            val cleanId = item.id.removePrefix("single_").removePrefix("stream_")
+                            val cleanId = item.id.removePrefix("single_").removePrefix("stream_").removePrefix("zip_")
                             val parts = cleanId.split("_")
                             val chatId = parts.getOrNull(0)?.toLongOrNull()
                             val messageId = parts.getOrNull(1)?.toLongOrNull()
@@ -3724,7 +3724,7 @@ class MainActivity : AppCompatActivity() {
             !file.originalFileName.contains("(Combined)") &&
             (file.fileSize > 0 || extractSizeFromUrl(file.streamUrl) > 0)
         }.map { file ->
-            val pId = file.id.removePrefix("single_").removePrefix("stream_")
+            val pId = file.id.removePrefix("single_").removePrefix("stream_").removePrefix("zip_")
             val pParts = pId.split("_")
             val cId = pParts.getOrNull(0)?.toLongOrNull() ?: 0L
             val mId = pParts.getOrNull(1)?.toLongOrNull() ?: 0L
@@ -4578,8 +4578,9 @@ class MainActivity : AppCompatActivity() {
         val fileId = extractFileIdFromUrl(stream.url)
         if (fileId != null && fileId != 0) {
             val fileName = DownloadManager.sanitizeFileName(cleanFileName.ifBlank { cleanDisplayTitle })
-            val messageId = stream.id.split("_").getOrNull(1)?.toLongOrNull() ?: 0L
-            val chatId = if (stream.chatId != 0L) stream.chatId else stream.id.split("_").getOrNull(0)?.toLongOrNull() ?: 0L
+            val cleanId = stream.id.removePrefix("zip_").removePrefix("single_").removePrefix("stream_")
+            val messageId = cleanId.split("_").getOrNull(1)?.toLongOrNull() ?: 0L
+            val chatId = if (stream.chatId != 0L) stream.chatId else cleanId.split("_").getOrNull(0)?.toLongOrNull() ?: 0L
             DownloadManager.startDownload(
                 context = this,
                 title = cleanDisplayTitle,
@@ -4783,7 +4784,7 @@ class MainActivity : AppCompatActivity() {
         val cachedParts = telegramGroupPartsCache[item.id]
         val parts = if (item.groupedFiles.isNotEmpty()) {
             item.groupedFiles.map { 
-                val pId = it.id.removePrefix("single_").removePrefix("stream_")
+                val pId = it.id.removePrefix("single_").removePrefix("stream_").removePrefix("zip_")
                 val pParts = pId.split("_")
                 val cId = pParts.getOrNull(0)?.toLongOrNull() ?: 0L
                 val mId = pParts.getOrNull(1)?.toLongOrNull() ?: 0L
@@ -4818,7 +4819,7 @@ class MainActivity : AppCompatActivity() {
 
         if (fileId != null && fileId != 0) {
             val fileName = DownloadManager.sanitizeFileName(item.originalFileName.ifBlank { cleanTitle })
-            val rest = item.id.removePrefix("single_").removePrefix("stream_")
+            val rest = item.id.removePrefix("single_").removePrefix("stream_").removePrefix("zip_")
             val parts = rest.split("_")
             val chatId = parts.getOrNull(0)?.toLongOrNull() ?: 0L
             val messageId = parts.getOrNull(1)?.toLongOrNull() ?: 0L
@@ -4838,7 +4839,7 @@ class MainActivity : AppCompatActivity() {
 
         if (item.type == "telegram_media" || item.streamUrl.contains("/stream") || item.streamUrl.contains("http") || item.id.contains("_")) {
             val fileName = DownloadManager.sanitizeFileName(item.originalFileName.ifBlank { cleanTitle })
-            val rest = item.id.removePrefix("single_").removePrefix("stream_")
+            val rest = item.id.removePrefix("single_").removePrefix("stream_").removePrefix("zip_")
             val parts = rest.split("_")
             val chatId = parts.getOrNull(0)?.toLongOrNull() ?: 0L
             val messageId = parts.getOrNull(1)?.toLongOrNull() ?: 0L
