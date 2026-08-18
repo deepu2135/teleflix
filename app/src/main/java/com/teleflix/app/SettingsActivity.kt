@@ -518,7 +518,7 @@ class SettingsActivity : AppCompatActivity() {
         downloadSettingsContainer.addView(downloadBox)
 
         // 3. Video Playback & Preferred Player Section (Collapsible)
-        val playbackSectionContainer = createCollapsibleSection("🎬 Video Playback & Startup")
+        val playbackSectionContainer = createSettingCard("🎬", "#064E3B", "Video Playback & Startup", "Configure playback and startup behavior")
 
         val playerBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -743,7 +743,7 @@ class SettingsActivity : AppCompatActivity() {
         playbackSectionContainer.addView(playerBox)
 
         // 4. Background Service Section (Collapsible)
-        val bgSectionContainer = createCollapsibleSection("⚡ Background Service & Execution")
+        val bgSectionContainer = createSettingCard("⚡", "#78350F", "Background Service & Execution", "Manage background service and execution")
         val bgBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = UITheme.createCardShape(this@SettingsActivity, UITheme.CARD, 16, UITheme.STROKE_COLOR, 1)
@@ -798,7 +798,7 @@ class SettingsActivity : AppCompatActivity() {
         bgSectionContainer.addView(bgBox)
 
         // 5. Storage, Cache & History Section (Collapsible)
-        val storageSectionContainer = createCollapsibleSection("💾 App Cache, Storage & Watch History")
+        val storageSectionContainer = createSettingCard("💾", "#1E3A8A", "App Cache, Storage & Watch History", "Clear cache and manage watch history")
 
         val storageBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1028,7 +1028,7 @@ class SettingsActivity : AppCompatActivity() {
         storageSectionContainer.addView(storageBox)
 
         // 6. Diagnostic & Streaming Logs Section (Collapsible)
-        val logsSectionContainer = createCollapsibleSection("📋 Diagnostic & Streaming Logs")
+        val logsSectionContainer = createSettingCard("📄", "#7C2D12", "Diagnostic & Streaming Logs", "View logs and diagnostic information")
 
         val logsBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
