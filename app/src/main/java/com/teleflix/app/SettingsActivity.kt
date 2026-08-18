@@ -68,93 +68,155 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // Header
-        val header = TextView(this).apply {
-            text = "TELEGRAM & TDLIB SETTINGS"
-            UITheme.applyLargeTitleStyle(this)
-            setTextColor(Color.parseColor(UITheme.PRIMARY))
-            setPadding(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 16))
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 20))
+            }
         }
-        root.addView(header)
+        val backBtn = TextView(this).apply {
+            text = "←"
+            textSize = 20f
+            gravity = android.view.Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = UITheme.createRippleCardShape(this@SettingsActivity, UITheme.CARD, 12, UITheme.STROKE_COLOR)
+            val sz = UITheme.dpToPx(this@SettingsActivity, 40)
+            layoutParams = LinearLayout.LayoutParams(sz, sz).apply {
+                setMargins(0, 0, UITheme.dpToPx(this@SettingsActivity, 16), 0)
+            }
+            setOnClickListener { finish() }
+        }
+        topBar.addView(backBtn)
 
-        fun createCollapsibleSection(titleText: String): LinearLayout {
-            val headerCard = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                background = UITheme.createRippleCardShape(this@SettingsActivity, UITheme.SURFACE, 16, UITheme.STROKE_COLOR)
-                val pV = UITheme.dpToPx(this@SettingsActivity, 14)
+        val headerTextLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        
+        val titleSpan = android.text.SpannableString("TELEGRAM & TDLIB SETTINGS")
+        titleSpan.setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#EF4444")), 0, 16, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        titleSpan.setSpan(android.text.style.ForegroundColorSpan(Color.WHITE), 17, titleSpan.length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        
+        val headerTitle = TextView(this).apply {
+            text = titleSpan
+            textSize = 18f
+            setTypeface(null, Typeface.BOLD)
+        }
+        headerTextLayout.addView(headerTitle)
+
+        val headerSub = TextView(this).apply {
+            text = "Manage your Telegram session and related preferences"
+            textSize = 12f
+            setTextColor(Color.parseColor("#9CA3AF"))
+        }
+        headerTextLayout.addView(headerSub)
+
+        topBar.addView(headerTextLayout)
+        root.addView(topBar)
+
+        fun createSettingCard(emoji: String, bgColor: String, titleText: String, subtitleText: String, isRedBorder: Boolean = false, isExpanded: Boolean = false): LinearLayout {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = UITheme.createRippleCardShape(this@SettingsActivity, UITheme.SURFACE, 24, if (isRedBorder) "#EF4444" else UITheme.STROKE_COLOR)
+                val pV = UITheme.dpToPx(this@SettingsActivity, 16)
                 val pH = UITheme.dpToPx(this@SettingsActivity, 16)
                 setPadding(pH, pV, pH, pV)
-                isClickable = true
-                isFocusable = true
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                     setMargins(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 12))
                 }
             }
+            
+            val headerLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            card.addView(headerLayout)
 
-            val title = TextView(this).apply {
-                text = titleText
-                UITheme.applySectionTitleStyle(this)
-                textSize = 16f
+            val iconBox = TextView(this).apply {
+                text = emoji
+                textSize = 20f
+                gravity = android.view.Gravity.CENTER
+                background = UITheme.createRippleCardShape(this@SettingsActivity, bgColor, 12, bgColor)
+                val sz = UITheme.dpToPx(this@SettingsActivity, 44)
+                layoutParams = LinearLayout.LayoutParams(sz, sz).apply {
+                    setMargins(0, 0, UITheme.dpToPx(this@SettingsActivity, 16), 0)
+                }
+            }
+            headerLayout.addView(iconBox)
+
+            val textLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
-            headerCard.addView(title)
-
-            val arrow = TextView(this).apply {
-                text = "▼"
-                textSize = 14f
-                setTypeface(null, Typeface.NORMAL)
-                setTextColor(Color.parseColor(UITheme.TEXT_SECONDARY))
+            val titleView = TextView(this).apply {
+                text = titleText
+                UITheme.applySectionTitleStyle(this)
+                textSize = 15f
             }
-            headerCard.addView(arrow)
-            root.addView(headerCard)
+            val subtitleView = TextView(this).apply {
+                text = subtitleText
+                UITheme.applyMetadataStyle(this)
+                textSize = 12f
+                setTextColor(Color.parseColor("#9CA3AF"))
+            }
+            textLayout.addView(titleView)
+            if (subtitleText.isNotEmpty()) {
+                textLayout.addView(subtitleView)
+            }
+            headerLayout.addView(textLayout)
 
-            val container = LinearLayout(this).apply {
+            var arrow: TextView? = null
+            if (!isExpanded) {
+                arrow = TextView(this).apply {
+                    text = "›"
+                    textSize = 24f
+                    setTextColor(Color.parseColor(UITheme.TEXT_SECONDARY))
+                }
+                headerLayout.addView(arrow)
+            }
+
+            val contentContainer = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                visibility = android.view.View.GONE
+                visibility = if (isExpanded) android.view.View.VISIBLE else android.view.View.GONE
+                val mt = UITheme.dpToPx(this@SettingsActivity, 16)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 16))
+                    setMargins(0, mt, 0, 0)
                 }
             }
-            root.addView(container)
+            card.addView(contentContainer)
+            root.addView(card)
 
-            headerCard.setOnClickListener {
-                if (container.visibility == android.view.View.VISIBLE) {
-                    container.visibility = android.view.View.GONE
-                    arrow.text = "▼"
-                } else {
-                    container.visibility = android.view.View.VISIBLE
-                    arrow.text = "▲"
+            if (!isExpanded) {
+                headerLayout.isClickable = true
+                headerLayout.isFocusable = true
+                headerLayout.setOnClickListener {
+                    if (contentContainer.visibility == android.view.View.GONE) {
+                        contentContainer.visibility = android.view.View.VISIBLE
+                        arrow?.rotation = 90f
+                    } else {
+                        contentContainer.visibility = android.view.View.GONE
+                        arrow?.rotation = 0f
+                    }
                 }
             }
-            return container
+            return contentContainer
         }
 
         // 1. Teleflix Login Section
-        val loginSettingsContainer = createCollapsibleSection("🔐 Teleflix Login & Account")
+        val loginSettingsContainer = createSettingCard("🔐", "#7F1D1D", "Teleflix Login & Account", "Manage your Teleflix account", false, false)
 
-        // Session Status Box
+        // 2. Telegram Account Session
+        val telegramSessionContainer = createSettingCard("✈️", "#1E3A8A", "Telegram Account Session", "", true, true)
+
         val sessionBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#161B28"))
-            setPadding(24, 24, 24, 24)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 0, 0, 16)
-            }
         }
-
-        val sessionTitle = TextView(this).apply {
-            text = "Telegram Account Session"
-            textSize = 16f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-        }
-        sessionBox.addView(sessionTitle)
-
+        
         statusText = TextView(this).apply {
             text = "Initializing TDLib native engine..."
             textSize = 14f
             setTextColor(Color.parseColor("#F59E0B"))
-            setPadding(0, 8, 0, 16)
+            setPadding(0, 0, 0, 16)
         }
         sessionBox.addView(statusText)
 
@@ -162,11 +224,14 @@ class SettingsActivity : AppCompatActivity() {
             text = "Connect Telegram Account"
             setBackgroundColor(Color.parseColor("#3B82F6"))
             setTextColor(Color.WHITE)
+            setTypeface(null, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 16, 0, 0)
+            }
             setOnClickListener { handleAuthAction() }
         }
         sessionBox.addView(authBtn)
-
-        loginSettingsContainer.addView(sessionBox)
+        telegramSessionContainer.addView(sessionBox)
 
         // API Credentials Box
         apiBox = LinearLayout(this).apply {
@@ -249,8 +314,8 @@ class SettingsActivity : AppCompatActivity() {
 
         loginSettingsContainer.addView(apiBox)
 
-        // 2. Download Location & Storage Section (Collapsible)
-        val downloadSettingsContainer = createCollapsibleSection("📥 Download Location & Storage")
+        // 3. Download Location & Storage Section
+        val downloadSettingsContainer = createSettingCard("📁", "#4C1D95", "Download Location & Storage", "Set download path and manage storage")
 
         val downloadBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1174,9 +1239,10 @@ class SettingsActivity : AppCompatActivity() {
                         showPasswordDialog()
                     }
                     is TelegramAuthState.Ready -> {
-                        statusText.text = "Connected as ${state.firstName} (ID: ${state.userId})\nNative TDLib active and monitoring channels!"
+                        statusText.text = "🟢 Connected as ${state.firstName} ID: ${state.userId}\n✅ Native TDLib active and monitoring channels!"
                         statusText.setTextColor(Color.parseColor("#10B981"))
-                        authBtn.text = "Log Out of Telegram"
+                        authBtn.text = "↪️ LOG OUT OF TELEGRAM"
+                        authBtn.setBackgroundColor(Color.parseColor("#2563EB")) // Slightly darker blue for logout
                     }
                     is TelegramAuthState.Error -> {
                         statusText.text = "Error: ${state.message}"
