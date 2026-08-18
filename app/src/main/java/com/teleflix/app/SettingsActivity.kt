@@ -396,10 +396,11 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val concurrencyOptions = listOf(
-            1 to "1 File\nSequential",
-            2 to "2 Files\nRecommended",
+            1 to "1 File\nSeq",
+            2 to "2 Files\nRec",
             3 to "3 Files\nFast",
-            4 to "4 Files\nMax Speed"
+            4 to "4 Files\nMax",
+            6 to "6 Files\nUltra"
         )
         val concurrencyButtons = mutableListOf<TextView>()
         val currentMax = DownloadManager.getMaxConcurrentDownloads(this)

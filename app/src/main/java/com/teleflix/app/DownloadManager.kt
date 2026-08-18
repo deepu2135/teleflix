@@ -234,6 +234,14 @@ object DownloadManager {
             }
         }
 
+        // Fix fake archive extensions appended to videos to bypass filters (e.g. .mkv.zip -> .mkv)
+        val fakeArchiveExtRegex = Regex("""(?i)\.(mp4|mkv|avi|mov|wmv|flv|webm|ts)\.(zip|rar|7z|bin|dat|txt)$""")
+        while (fakeArchiveExtRegex.containsMatchIn(clean)) {
+            clean = clean.replace(fakeArchiveExtRegex) { matchResult ->
+                "." + matchResult.groupValues[1]
+            }
+        }
+
         // Check if filename already has a valid file extension (e.g. .mp3, .mp4, .mkv, .avi, etc.)
         val hasExtRegex = Regex("""\.[a-zA-Z0-9]{2,5}$""", RegexOption.IGNORE_CASE)
         if (hasExtRegex.containsMatchIn(clean)) {
