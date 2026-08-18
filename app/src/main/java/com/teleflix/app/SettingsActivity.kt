@@ -50,14 +50,14 @@ class SettingsActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            val pad = UITheme.dpToPx(this@SettingsActivity, 16)
+            val pad = UITheme.dpToPx(this@SettingsActivity, 8)
             setPadding(pad, pad, pad, pad)
         }
         scrollView.addView(root)
 
         ViewCompat.setOnApplyWindowInsetsListener(scrollView) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            val pad = UITheme.dpToPx(this@SettingsActivity, 16)
+            val pad = UITheme.dpToPx(this@SettingsActivity, 8)
             view.setPadding(
                 pad + insets.left,
                 pad + insets.top,
@@ -72,7 +72,7 @@ class SettingsActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 20))
+                setMargins(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 12))
             }
         }
         val backBtn = TextView(this).apply {
@@ -117,12 +117,12 @@ class SettingsActivity : AppCompatActivity() {
         fun createSettingCard(emoji: String, bgColor: String, titleText: String, subtitleText: String, isRedBorder: Boolean = false, isExpanded: Boolean = false): LinearLayout {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                background = UITheme.createRippleCardShape(this@SettingsActivity, UITheme.SURFACE, 24, if (isRedBorder) "#EF4444" else UITheme.STROKE_COLOR)
-                val pV = UITheme.dpToPx(this@SettingsActivity, 16)
-                val pH = UITheme.dpToPx(this@SettingsActivity, 16)
+                background = UITheme.createRippleCardShape(this@SettingsActivity, UITheme.SURFACE, 16, if (isRedBorder) "#EF4444" else UITheme.STROKE_COLOR)
+                val pV = UITheme.dpToPx(this@SettingsActivity, 10)
+                val pH = UITheme.dpToPx(this@SettingsActivity, 12)
                 setPadding(pH, pV, pH, pV)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 12))
+                    setMargins(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 6))
                 }
             }
             
@@ -134,12 +134,12 @@ class SettingsActivity : AppCompatActivity() {
 
             val iconBox = TextView(this).apply {
                 text = emoji
-                textSize = 20f
+                textSize = 16f
                 gravity = android.view.Gravity.CENTER
-                background = UITheme.createRippleCardShape(this@SettingsActivity, bgColor, 12, bgColor)
-                val sz = UITheme.dpToPx(this@SettingsActivity, 44)
+                background = UITheme.createRippleCardShape(this@SettingsActivity, bgColor, 10, bgColor)
+                val sz = UITheme.dpToPx(this@SettingsActivity, 36)
                 layoutParams = LinearLayout.LayoutParams(sz, sz).apply {
-                    setMargins(0, 0, UITheme.dpToPx(this@SettingsActivity, 16), 0)
+                    setMargins(0, 0, UITheme.dpToPx(this@SettingsActivity, 10), 0)
                 }
             }
             headerLayout.addView(iconBox)
@@ -151,12 +151,12 @@ class SettingsActivity : AppCompatActivity() {
             val titleView = TextView(this).apply {
                 text = titleText
                 UITheme.applySectionTitleStyle(this)
-                textSize = 15f
+                textSize = 14f
             }
             val subtitleView = TextView(this).apply {
                 text = subtitleText
                 UITheme.applyMetadataStyle(this)
-                textSize = 12f
+                textSize = 11f
                 setTextColor(Color.parseColor("#9CA3AF"))
             }
             textLayout.addView(titleView)
@@ -169,7 +169,7 @@ class SettingsActivity : AppCompatActivity() {
             if (!isExpanded) {
                 arrow = TextView(this).apply {
                     text = "›"
-                    textSize = 24f
+                    textSize = 20f
                     setTextColor(Color.parseColor(UITheme.TEXT_SECONDARY))
                 }
                 headerLayout.addView(arrow)
@@ -178,7 +178,7 @@ class SettingsActivity : AppCompatActivity() {
             val contentContainer = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 visibility = if (isExpanded) android.view.View.VISIBLE else android.view.View.GONE
-                val mt = UITheme.dpToPx(this@SettingsActivity, 16)
+                val mt = UITheme.dpToPx(this@SettingsActivity, 10)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                     setMargins(0, mt, 0, 0)
                 }
@@ -205,33 +205,36 @@ class SettingsActivity : AppCompatActivity() {
         // 1. Teleflix Login Section
         val loginSettingsContainer = createSettingCard("🔐", "#7F1D1D", "Teleflix Login & Account", "Manage your Teleflix account", false, false)
 
-        // 2. Telegram Account Session
-        val telegramSessionContainer = createSettingCard("✈️", "#1E3A8A", "Telegram Account Session", "", true, true)
-
-        val sessionBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        // Telegram Account Session (inside Teleflix Login)
+        val sessionTitle = TextView(this).apply {
+            text = "Telegram Account Session"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 4))
         }
-        
+        loginSettingsContainer.addView(sessionTitle)
+
         statusText = TextView(this).apply {
             text = "Initializing TDLib native engine..."
-            textSize = 14f
+            textSize = 12f
             setTextColor(Color.parseColor("#F59E0B"))
-            setPadding(0, 0, 0, 16)
+            setPadding(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 8))
         }
-        sessionBox.addView(statusText)
+        loginSettingsContainer.addView(statusText)
 
         authBtn = Button(this).apply {
             text = "Connect Telegram Account"
             setBackgroundColor(Color.parseColor("#3B82F6"))
             setTextColor(Color.WHITE)
             setTypeface(null, Typeface.BOLD)
+            textSize = 12f
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 16, 0, 0)
+                setMargins(0, 0, 0, UITheme.dpToPx(this@SettingsActivity, 8))
             }
             setOnClickListener { handleAuthAction() }
         }
-        sessionBox.addView(authBtn)
-        telegramSessionContainer.addView(sessionBox)
+        loginSettingsContainer.addView(authBtn)
 
         // API Credentials Box
         apiBox = LinearLayout(this).apply {
