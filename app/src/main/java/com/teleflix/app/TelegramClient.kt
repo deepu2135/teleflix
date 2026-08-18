@@ -220,9 +220,41 @@ object TelegramClient {
         }
     }
 
+    fun cleanupGhostDownloads() {
+        scope.launch {
+            try {
+                val res = sendRequest(TdApi.SearchFileDownloads("", /* onlyActive = */ true, /* onlyCompleted = */ false, "", 100))
+                if (res is TdApi.FoundFileDownloads) {
+                    res.files?.forEach { fd ->
+                        if (!DownloadManager.isFileIdActive(fd.fileId)) {
+                            TeleflixLogger.log(TAG, "Cancelling zombie background download fileId=${fd.fileId}")
+                            sendRequest(TdApi.RemoveFileFromDownloads(fd.fileId, false))
+                            sendRequest(TdApi.CancelDownloadFile(fd.fileId, false))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error cleaning ghost downloads: ${e.message}")
+            }
+        }
+    }
+
     private fun handleUpdate(context: Context, obj: TdApi.Object) {
         when (obj) {
             is TdApi.UpdateFile -> DownloadManager.onFileUpdate(context, obj.file)
+            is TdApi.UpdateFileDownload -> {
+                if (!obj.isPaused && !DownloadManager.isFileIdActive(obj.fileId)) {
+                    client?.send(TdApi.RemoveFileFromDownloads(obj.fileId, false), null)
+                    client?.send(TdApi.CancelDownloadFile(obj.fileId, false), null)
+                }
+            }
+            is TdApi.UpdateFileAddedToDownloads -> {
+                val fId = obj.fileDownload?.fileId ?: 0
+                if (fId != 0 && !DownloadManager.isFileIdActive(fId)) {
+                    client?.send(TdApi.RemoveFileFromDownloads(fId, false), null)
+                    client?.send(TdApi.CancelDownloadFile(fId, false), null)
+                }
+            }
             is TdApi.UpdateAuthorizationState -> handleAuthState(context, obj.authorizationState)
             is TdApi.UpdateConnectionState -> {
                 val stateName = obj.state::class.simpleName ?: "Unknown"
@@ -264,6 +296,7 @@ object TelegramClient {
                 _authState.value = TelegramAuthState.WaitPassword
             }
             is TdApi.AuthorizationStateReady -> {
+                cleanupGhostDownloads()
                 scope.launch {
                     val user = sendRequest(TdApi.GetMe()) as? TdApi.User
                     for (chatList in listOf(TdApi.ChatListMain(), TdApi.ChatListArchive())) {

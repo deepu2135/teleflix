@@ -1457,11 +1457,11 @@ object TelegramStreamingProxy {
                 }
             }
 
-            val thumbLimit = if (expectedSize in 1..5_242_880L) expectedSize else 512 * 1024L
+            val thumbLimit = if (expectedSize in 1..262_144L) expectedSize else 256 * 1024L
             runCatching {
                 TelegramClient.sendRequest(TdApi.DownloadFile().also { req ->
                     req.fileId = fileId
-                    req.priority = 16
+                    req.priority = 1
                     req.offset = 0
                     req.limit = thumbLimit
                     req.synchronous = false
